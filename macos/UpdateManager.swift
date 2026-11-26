@@ -27,18 +27,21 @@ private struct GitHubAsset: Decodable {
 final class UpdateManager {
     static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     private static let api = "https://api.github.com/repos/garsetayusuf/openhop-mac/releases/latest"
+    static let publicKeyBase64 = "Tyq6eOuHXEb4psJHQmwbjfrxT7IvCTpzdxtYjgNMXb8="
 
     var onState: ((UpdateState, String, Double) -> Void)?
     private var dataTask: URLSessionDataTask?
     private var downloadTask: URLSessionDownloadTask?
     private(set) var latestVersion: String?
     private(set) var dmgURL: URL?
+    private(set) var manifestURL: URL?
     private(set) var notes = ""
     private var dmgPath: String {
         let dir = NSHomeDirectory() + "/Library/Caches/openhop/updates"
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir + "/OpenHop.dmg"
     }
+    private var manifestPath: String { dmgPath + ".sha256" }
 
     static func compareVersions(_ a: String, _ b: String) -> Int {
         let ax = a.trimmingCharacters(in: .init(charactersIn: "v")).split(separator: ".").map { Int($0) ?? 0 }
@@ -69,9 +72,15 @@ final class UpdateManager {
             self.notes = release.body ?? ""
             self.dmgURL = release.assets.first { $0.name == "OpenHop.dmg" }
                 .flatMap { URL(string: $0.browserDownloadURL) }
+            self.manifestURL = release.assets.first { $0.name == "OpenHop.dmg.sha256" }
+                .flatMap { URL(string: $0.browserDownloadURL) }
             if Self.compareVersions(version, Self.appVersion) > 0 {
                 guard self.dmgURL != nil else {
                     self.emit(.failed("Release \(version) has no OpenHop.dmg asset."), "", 0)
+                    return
+                }
+                guard self.manifestURL != nil else {
+                    self.emit(.failed("Release \(version) has no OpenHop.dmg.sha256 asset."), "", 0)
                     return
                 }
                 self.emit(.available(version), "Version \(version) is available.", 0)
@@ -83,31 +92,83 @@ final class UpdateManager {
     }
 
     func download() {
-        guard let url = dmgURL, downloadTask == nil else { return }
-        emit(.downloading, "Downloading \(url.lastPathComponent)…", 0)
+        guard let url = dmgURL, let manifest = manifestURL, downloadTask == nil else { return }
+        emit(.downloading, "Downloading update…", 0)
         downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temp, _, error in
             guard let self else { return }
-            DispatchQueue.main.async { self.downloadTask = nil }
-            if let cancelled = error as? URLError, cancelled.code == .cancelled { return }
+            if let cancelled = error as? URLError, cancelled.code == .cancelled {
+                DispatchQueue.main.async { self.downloadTask = nil }
+                return
+            }
             guard let temp, error == nil else {
+                DispatchQueue.main.async { self.downloadTask = nil }
                 self.emit(.failed("Download failed."), "", 0)
                 return
             }
+            URLSession.shared.dataTask(with: manifest) { [weak self] data, _, merr in
+                guard let self else { return }
+                guard let data, merr == nil else {
+                    DispatchQueue.main.async { self.downloadTask = nil }
+                    self.emit(.failed("Could not download the update manifest."), "", 0)
+                    return
+                }
+                self.verifyAndFinish(temp: temp, manifestData: data)
+            }.resume()
+        }
+        downloadTask?.resume()
+    }
+
+    private func verifyAndFinish(temp: URL, manifestData: Data) {
+        let home = NSHomeDirectory()
+        let py = home + "/Library/Application Support/openhop/venv/bin/python"
+        let src = home + "/Library/Application Support/openhop/src"
+        let script = src + "/verify_update.py"
+        let manifest = manifestPath
+        let dmg = dmgPath
+        DispatchQueue.global(qos: .userInitiated).async {
+            try? manifestData.write(to: URL(fileURLWithPath: manifest))
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: py)
+            p.arguments = [script, temp.path, manifest, Self.publicKeyBase64]
+            let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
+            do { try p.run() } catch {
+                try? FileManager.default.removeItem(at: temp)
+                try? FileManager.default.removeItem(atPath: manifest)
+                DispatchQueue.main.async { self.downloadTask = nil }
+                self.emit(.failed("Could not run update verification."), "", 0)
+                return
+            }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            let out = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard p.terminationStatus == 0 else {
+                try? FileManager.default.removeItem(at: temp)
+                try? FileManager.default.removeItem(atPath: manifest)
+                DispatchQueue.main.async { self.downloadTask = nil }
+                let reason = out.isEmpty ? "unknown reason" : out
+                self.emit(.failed("Update verification failed: \(reason)"), "", 0)
+                return
+            }
             do {
-                try? FileManager.default.removeItem(atPath: self.dmgPath)
-                try FileManager.default.moveItem(at: temp, to: URL(fileURLWithPath: self.dmgPath))
-                self.emit(.ready, "Update downloaded. Ready to install.", 1)
+                try? FileManager.default.removeItem(atPath: dmg)
+                try FileManager.default.moveItem(at: temp, to: URL(fileURLWithPath: dmg))
+                DispatchQueue.main.async { self.downloadTask = nil }
+                self.emit(.ready, "Update verified and ready to install.", 1)
             } catch {
+                try? FileManager.default.removeItem(at: temp)
+                try? FileManager.default.removeItem(atPath: manifest)
+                DispatchQueue.main.async { self.downloadTask = nil }
                 self.emit(.failed("Could not save the update: \(error.localizedDescription)"), "", 0)
             }
         }
-        downloadTask?.resume()
     }
 
     func cancel() {
         downloadTask?.cancel()
         downloadTask = nil
         try? FileManager.default.removeItem(atPath: dmgPath)
+        try? FileManager.default.removeItem(atPath: manifestPath)
         emit(checkResultState(), "Download cancelled.", 0)
     }
 
