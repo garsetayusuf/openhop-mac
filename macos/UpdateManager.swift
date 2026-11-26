@@ -78,6 +78,87 @@ final class UpdateManager {
         dataTask?.resume()
     }
 
+    func download() {
+        guard let url = dmgURL, downloadTask == nil else { return }
+        emit(.downloading, "Downloading \(url.lastPathComponent)…", 0)
+        downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temp, _, error in
+            guard let self else { return }
+            DispatchQueue.main.async { self.downloadTask = nil }
+            guard let temp, error == nil else {
+                self.emit(.failed("Download failed."), "", 0)
+                return
+            }
+            do {
+                try? FileManager.default.removeItem(atPath: self.dmgPath)
+                try FileManager.default.moveItem(at: temp, to: URL(fileURLWithPath: self.dmgPath))
+                self.emit(.ready, "Update downloaded. Ready to install.", 1)
+            } catch {
+                self.emit(.failed("Could not save the update: \(error.localizedDescription)"), "", 0)
+            }
+        }
+        downloadTask?.resume()
+    }
+
+    func cancel() {
+        downloadTask?.cancel()
+        downloadTask = nil
+        try? FileManager.default.removeItem(atPath: dmgPath)
+        emit(checkResultState(), "Download cancelled.", 0)
+    }
+
+    private func checkResultState() -> UpdateState {
+        guard let latestVersion, Self.compareVersions(latestVersion, Self.appVersion) > 0 else { return .upToDate }
+        return .available(latestVersion)
+    }
+
+    func install(completion: @escaping (Bool, String) -> Void) {
+        let dmg = dmgPath
+        let mount = "/private/var/folders/j3/134bb29n2nzgygplhpfvq8gw0000gn/T/opencode/openhop-update-mount"
+        let stage = "/private/var/folders/j3/134bb29n2nzgygplhpfvq8gw0000gn/T/opencode/openhop-update-stage"
+        DispatchQueue.global(qos: .userInitiated).async {
+            func run(_ exe: String, _ args: [String]) -> (Int32, String) {
+                let p = Process(); p.executableURL = URL(fileURLWithPath: exe); p.arguments = args
+                let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
+                do { try p.run() } catch { return (-1, error.localizedDescription) }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
+                return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+            }
+            try? FileManager.default.removeItem(atPath: mount)
+            try? FileManager.default.removeItem(atPath: stage)
+            try? FileManager.default.createDirectory(atPath: mount, withIntermediateDirectories: true)
+            try? FileManager.default.createDirectory(atPath: stage, withIntermediateDirectories: true)
+            let attach = run("/usr/bin/hdiutil", ["attach", dmg, "-nobrowse", "-quiet", "-mountpoint", mount])
+            guard attach.0 == 0 else {
+                DispatchQueue.main.async { completion(false, "Could not mount the update (exit \(attach.0)).") }
+                return
+            }
+            let source = mount + "/OpenHop.app"
+            let staged = stage + "/OpenHop.app"
+            guard FileManager.default.fileExists(atPath: source) else {
+                _ = run("/usr/bin/hdiutil", ["detach", mount, "-quiet"])
+                DispatchQueue.main.async { completion(false, "The DMG has no OpenHop.app.") }
+                return
+            }
+            let copy = run("/bin/cp", ["-R", source, staged])
+            _ = run("/usr/bin/hdiutil", ["detach", mount, "-quiet"])
+            guard copy.0 == 0 else {
+                DispatchQueue.main.async { completion(false, "Could not stage the update (exit \(copy.0)).") }
+                return
+            }
+            let target = "/Applications/OpenHop.app"
+            let backup = stage + "/OpenHop-old.app"
+            let moveOld = run("/bin/mv", [target, backup])
+            let install = run("/bin/mv", [staged, target])
+            if install.0 != 0 {
+                if moveOld.0 == 0 { _ = run("/bin/mv", [backup, target]) }
+                DispatchQueue.main.async { completion(false, "Could not replace the app (exit \(install.0)).") }
+                return
+            }
+            _ = run("/usr/bin/open", ["-n", target])
+            DispatchQueue.main.async { completion(true, "Installed. Restarting…") }
+        }
+    }
+
     func emit(_ state: UpdateState, _ message: String, _ progress: Double) {
         DispatchQueue.main.async { self.onState?(state, message, progress) }
     }
