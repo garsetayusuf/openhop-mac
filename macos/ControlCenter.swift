@@ -242,7 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         w.contentViewController = hosting
         w.setContentSize(NSSize(width: 1180, height: 700))
         w.appearance = NSAppearance(named: .darkAqua)
-        w.collectionBehavior = [.fullScreenPrimary, .canJoinAllSpaces]
+        w.collectionBehavior = [.fullScreenPrimary]
         w.makeKeyAndOrderFront(nil)
         w.orderFrontRegardless()
         window = w
