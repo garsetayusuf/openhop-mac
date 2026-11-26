@@ -31,7 +31,7 @@ say "compiling native SwiftUI app…"
 cd "$SRC" || die "cannot cd to $SRC"
 swiftc -swift-version 5 -Onone -parse-as-library -target arm64-apple-macos13.0 \
   -o "$CONTENTS/MacOS/OpenHop" \
-  "$SRC/macos/LifecycleCoordinator.swift" "$SRC/macos/DashboardModel.swift" "$SRC/macos/ControlCenter.swift" \
+  "$SRC/macos/LifecycleCoordinator.swift" "$SRC/macos/DashboardModel.swift" "$SRC/macos/UpdateManager.swift" "$SRC/macos/ControlCenter.swift" \
   || die "Swift compile failed — see errors above"
 [ -x "$CONTENTS/MacOS/OpenHop" ] || die "compiled binary missing"
 ok "compiled: $CONTENTS/MacOS/OpenHop"
