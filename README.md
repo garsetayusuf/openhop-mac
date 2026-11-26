@@ -198,7 +198,7 @@ OpenCode CLI / Desktop
 | `install-macos.sh` / `uninstall-macos.sh` | Runtime install and clean removal |
 | `assets/brand/`, `assets/dmg/` | App icon, wordmark, DMG background |
 | `setup/` | Source for the guided installer (legacy) |
-| `docs/audits/` | Lifecycle analysis |
+| `REVERSE_ENGINEERING.md` | Reverse-engineering notes |
 
 </details>
 
