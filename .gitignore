@@ -49,3 +49,7 @@ logs/
 
 # Stray local screenshot
 pointer-console2.png
+
+# Local AI planning / coordination files (kept on disk, never published)
+.superpowers/
+docs/superpowers/

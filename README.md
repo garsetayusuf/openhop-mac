@@ -198,7 +198,7 @@ OpenCode CLI / Desktop
 | `install-macos.sh` / `uninstall-macos.sh` | Runtime install and clean removal |
 | `assets/brand/`, `assets/dmg/` | App icon, wordmark, DMG background |
 | `setup/` | Source for the guided installer (legacy) |
-| `docs/superpowers/specs/` | Design specs |
+| `docs/audits/` | Lifecycle analysis |
 
 </details>
 
@@ -225,7 +225,7 @@ Publish from source with:
 bash release.sh 3.8.2 "notes"
 ```
 
-This bumps `macos/Info.plist`, builds `dist/OpenHop.dmg`, commits and tags `v3.8.2`, pushes, and attaches the DMG to a GitHub release. Design: [`docs/superpowers/specs/2026-11-27-ota-updates-design.md`](docs/superpowers/specs/2026-11-27-ota-updates-design.md).
+This bumps `macos/Info.plist`, builds `dist/OpenHop.dmg`, commits and tags `v3.8.2`, pushes, and attaches the DMG to a GitHub release.
 
 ---
 
