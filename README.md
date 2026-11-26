@@ -158,7 +158,7 @@ Everything runs locally. To do its job, OpenHop:
 - runs two user launch agents — one keeps the connection healthy (`keeper`), one watches for the limit (`guard`);
 - clears OpenCode Desktop's local free-limit lock after switching address, without touching chat history;
 - keeps usage counters on this Mac; nothing is uploaded;
-- checks GitHub Releases for a newer version (see Roadmap).
+- checks GitHub Releases for a newer version (see Updates).
 
 No sudo, no system-wide changes, no `/etc/hosts`, no `pf`.
 
@@ -215,9 +215,17 @@ Then relaunch OpenHop.
 
 </details>
 
-## Roadmap
+## Updates
 
-OTA updates are designed in [`docs/superpowers/specs/2026-11-27-ota-updates-design.md`](docs/superpowers/specs/2026-11-27-ota-updates-design.md): a version button in Settings → About, a daily background check against GitHub Releases, a badge plus notification when a new version appears, and automatic download → Install & Restart → relaunch. Publishing will be a single `release.sh` call that tags the commit and attaches the DMG to a GitHub release.
+The version button in **Settings → About** shows the installed version and checks GitHub Releases; a daily background check also adds a badge and notification when a newer version is available. **Download** fetches the DMG, then **Install & Restart** applies it (or **Cancel** to keep the current version). Nothing is uploaded.
+
+Publish from source with:
+
+```bash
+bash release.sh 3.8.2 "notes"
+```
+
+This bumps `macos/Info.plist`, builds `dist/OpenHop.dmg`, commits and tags `v3.8.2`, pushes, and attaches the DMG to a GitHub release. Design: [`docs/superpowers/specs/2026-11-27-ota-updates-design.md`](docs/superpowers/specs/2026-11-27-ota-updates-design.md).
 
 ---
 
