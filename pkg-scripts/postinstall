@@ -1,0 +1,58 @@
+#!/bin/bash
+# Package postinstall: run the full OpenHop setup for the console user.
+set -eu
+LOG="/var/log/openhop-install.log"
+: > "$LOG"
+echo "OpenHop postinstall $(date)" >> "$LOG"
+
+USER_NAME="$(stat -f%Su /dev/console)"
+if [ -z "$USER_NAME" ] || [ "$USER_NAME" = root ]; then
+  echo "No console user found; run install-macos.sh manually from the app's Resources/payload." >> "$LOG"
+  exit 0
+fi
+USER_HOME="$(dscl . -read "/Users/$USER_NAME" NFSHomeDirectory 2>/dev/null | awk '{print $2}' || true)"
+[ -n "$USER_HOME" ] || USER_HOME="/Users/$USER_NAME"
+
+PAYLOAD="/Applications/OpenHop.app/Contents/Resources/payload"
+if [ ! -f "$PAYLOAD/install-macos.sh" ]; then
+  echo "Payload missing at $PAYLOAD" >> "$LOG"
+  exit 1
+fi
+
+# Preflight: report every prerequisite, then fail clearly instead of a silent error.
+echo "Preflight:" >> "$LOG"
+OC="$(command -v opencode 2>/dev/null || true)"
+[ -n "$OC" ] || [ -x "$USER_HOME/.opencode/bin/opencode" ] || [ -x "$USER_HOME/.local/bin/opencode" ] || {
+  echo "OpenHop preflight failed: OpenCode CLI not found. Install it from https://opencode.ai, then run this package again." >&2
+  echo "OpenCode CLI missing" >> "$LOG"
+  exit 1
+}
+echo "  opencode: found" >> "$LOG"
+WARP="$(command -v warp-cli 2>/dev/null || true)"
+[ -n "$WARP" ] || [ -x /usr/local/bin/warp-cli ] || {
+  echo "OpenHop preflight failed: warp-cli not found. Install Cloudflare WARP (brew install --cask cloudflare-warp), open it once to accept terms, then run this package again." >&2
+  echo "warp-cli missing" >> "$LOG"
+  exit 1
+}
+echo "  warp-cli: found" >> "$LOG"
+command -v python3 >/dev/null 2>&1 || {
+  echo "OpenHop preflight failed: python3 not found." >&2
+  exit 1
+}
+echo "  python3: found" >> "$LOG"
+command -v curl >/dev/null 2>&1 || {
+  echo "OpenHop preflight failed: curl not found." >&2
+  exit 1
+}
+echo "  curl: found" >> "$LOG"
+
+echo "Installing for $USER_NAME ($USER_HOME)" >> "$LOG"
+if sudo -u "$USER_NAME" env HOME="$USER_HOME" USER="$USER_NAME" LOGNAME="$USER_NAME" \
+    PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin" \
+    bash "$PAYLOAD/install-macos.sh" >> "$LOG" 2>&1; then
+  echo "OpenHop setup completed" >> "$LOG"
+  exit 0
+fi
+
+echo "OpenHop setup failed — see $LOG" >> "$LOG"
+exit 1

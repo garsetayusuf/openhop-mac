@@ -1,0 +1,11 @@
+# openhop for Mac — Python dependencies (arm64, macOS 27)
+# Installed into ~/Library/Application Support/openhop/venv by install-macos.sh.
+# NOTE: pythonnet and clr_loader from the upstream requirements.txt are
+# Windows-only (.NET interop) and are deliberately NOT listed here.
+# Do not install them on a Mac.
+pywebview>=5.0.0
+psutil>=5.9.0
+pystray>=0.19
+Pillow>=10
+# PyInstaller is NOT listed here — build-app.sh installs it only when
+# you choose to build OpenHop.app (README step 7).

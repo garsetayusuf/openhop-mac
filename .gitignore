@@ -1,0 +1,51 @@
+# Build output and installers
+build/
+dist/
+*.dmg
+*.zip
+*.pkg
+
+# Python caches and virtualenvs
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local state / logs
+logs/
+*.log
+*.jsonl
+
+# macOS and editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Tooling caches
+.codegraph/
+.pytest_cache/
+.mypy_cache/
+
+# Local AI-assistant config/skill copies (not project source)
+.agents/
+.augment/
+.claude/
+.codebuddy/
+.codewhale/
+.continue/
+.cursor/
+.factory/
+.gemini/
+.github/
+.kilocode/
+.kiro/
+.opencode/
+.qoder/
+.roo/
+.trae/
+.warp/
+.windsurf/
+
+# Stray local screenshot
+pointer-console2.png
