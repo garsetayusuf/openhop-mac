@@ -84,6 +84,7 @@ final class UpdateManager {
         downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temp, _, error in
             guard let self else { return }
             DispatchQueue.main.async { self.downloadTask = nil }
+            if let cancelled = error as? URLError, cancelled.code == .cancelled { return }
             guard let temp, error == nil else {
                 self.emit(.failed("Download failed."), "", 0)
                 return
@@ -123,12 +124,17 @@ final class UpdateManager {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
                 return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
             }
+            func cleanup(keepBackup: Bool = false) {
+                try? FileManager.default.removeItem(atPath: mount)
+                if !keepBackup { try? FileManager.default.removeItem(atPath: stage) }
+            }
             try? FileManager.default.removeItem(atPath: mount)
             try? FileManager.default.removeItem(atPath: stage)
             try? FileManager.default.createDirectory(atPath: mount, withIntermediateDirectories: true)
             try? FileManager.default.createDirectory(atPath: stage, withIntermediateDirectories: true)
             let attach = run("/usr/bin/hdiutil", ["attach", dmg, "-nobrowse", "-quiet", "-mountpoint", mount])
             guard attach.0 == 0 else {
+                cleanup()
                 DispatchQueue.main.async { completion(false, "Could not mount the update (exit \(attach.0)).") }
                 return
             }
@@ -136,12 +142,14 @@ final class UpdateManager {
             let staged = stage + "/OpenHop.app"
             guard FileManager.default.fileExists(atPath: source) else {
                 _ = run("/usr/bin/hdiutil", ["detach", mount, "-quiet"])
+                cleanup()
                 DispatchQueue.main.async { completion(false, "The DMG has no OpenHop.app.") }
                 return
             }
             let copy = run("/bin/cp", ["-R", source, staged])
             _ = run("/usr/bin/hdiutil", ["detach", mount, "-quiet"])
             guard copy.0 == 0 else {
+                cleanup()
                 DispatchQueue.main.async { completion(false, "Could not stage the update (exit \(copy.0)).") }
                 return
             }
@@ -150,11 +158,25 @@ final class UpdateManager {
             let moveOld = run("/bin/mv", [target, backup])
             let install = run("/bin/mv", [staged, target])
             if install.0 != 0 {
-                if moveOld.0 == 0 { _ = run("/bin/mv", [backup, target]) }
-                DispatchQueue.main.async { completion(false, "Could not replace the app (exit \(install.0)).") }
+                var message = "Could not replace the app (exit \(install.0))."
+                var keepBackup = false
+                if moveOld.0 == 0 {
+                    let rollback = run("/bin/mv", [backup, target])
+                    if rollback.0 != 0 {
+                        message += " Could not restore the previous app (exit \(rollback.0)); backup kept at \(backup)."
+                        keepBackup = true
+                    }
+                }
+                cleanup(keepBackup: keepBackup)
+                DispatchQueue.main.async { completion(false, message) }
                 return
             }
-            _ = run("/usr/bin/open", ["-n", target])
+            cleanup()
+            let reopen = run("/usr/bin/open", ["-n", target])
+            guard reopen.0 == 0 else {
+                DispatchQueue.main.async { completion(false, "Installed but could not relaunch (exit \(reopen.0)).") }
+                return
+            }
             DispatchQueue.main.async { completion(true, "Installed. Restarting…") }
         }
     }
