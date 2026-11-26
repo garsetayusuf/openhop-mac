@@ -113,8 +113,8 @@ final class UpdateManager {
 
     func install(completion: @escaping (Bool, String) -> Void) {
         let dmg = dmgPath
-        let mount = "/private/var/folders/j3/134bb29n2nzgygplhpfvq8gw0000gn/T/opencode/openhop-update-mount"
-        let stage = "/private/var/folders/j3/134bb29n2nzgygplhpfvq8gw0000gn/T/opencode/openhop-update-stage"
+        let mount = FileManager.default.temporaryDirectory.appendingPathComponent("openhop-update-mount").path
+        let stage = FileManager.default.temporaryDirectory.appendingPathComponent("openhop-update-stage").path
         DispatchQueue.global(qos: .userInitiated).async {
             func run(_ exe: String, _ args: [String]) -> (Int32, String) {
                 let p = Process(); p.executableURL = URL(fileURLWithPath: exe); p.arguments = args
