@@ -32,6 +32,7 @@ final class UpdateManager {
     var onState: ((UpdateState, String, Double) -> Void)?
     private var dataTask: URLSessionDataTask?
     private var downloadTask: URLSessionDownloadTask?
+    private var downloadGeneration = 0
     private(set) var latestVersion: String?
     private(set) var dmgURL: URL?
     private(set) var manifestURL: URL?
@@ -93,6 +94,8 @@ final class UpdateManager {
 
     func download() {
         guard let url = dmgURL, let manifest = manifestURL, downloadTask == nil else { return }
+        downloadGeneration += 1
+        let generation = downloadGeneration
         emit(.downloading, "Downloading update…", 0)
         downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temp, _, error in
             guard let self else { return }
@@ -107,18 +110,23 @@ final class UpdateManager {
             }
             URLSession.shared.dataTask(with: manifest) { [weak self] data, _, merr in
                 guard let self else { return }
+                guard self.downloadGeneration == generation else {
+                    try? FileManager.default.removeItem(at: temp)
+                    return
+                }
                 guard let data, merr == nil else {
+                    try? FileManager.default.removeItem(at: temp)
                     DispatchQueue.main.async { self.downloadTask = nil }
                     self.emit(.failed("Could not download the update manifest."), "", 0)
                     return
                 }
-                self.verifyAndFinish(temp: temp, manifestData: data)
+                self.verifyAndFinish(temp: temp, manifestData: data, generation: generation)
             }.resume()
         }
         downloadTask?.resume()
     }
 
-    private func verifyAndFinish(temp: URL, manifestData: Data) {
+    private func verifyAndFinish(temp: URL, manifestData: Data, generation: Int) {
         let home = NSHomeDirectory()
         let py = home + "/Library/Application Support/openhop/venv/bin/python"
         let src = home + "/Library/Application Support/openhop/src"
@@ -126,7 +134,19 @@ final class UpdateManager {
         let manifest = manifestPath
         let dmg = dmgPath
         DispatchQueue.global(qos: .userInitiated).async {
-            try? manifestData.write(to: URL(fileURLWithPath: manifest))
+            guard self.downloadGeneration == generation else {
+                try? FileManager.default.removeItem(at: temp)
+                return
+            }
+            do {
+                try manifestData.write(to: URL(fileURLWithPath: manifest))
+            } catch {
+                try? FileManager.default.removeItem(at: temp)
+                guard self.downloadGeneration == generation else { return }
+                DispatchQueue.main.async { self.downloadTask = nil }
+                self.emit(.failed("Could not save the update manifest: \(error.localizedDescription)"), "", 0)
+                return
+            }
             let p = Process()
             p.executableURL = URL(fileURLWithPath: py)
             p.arguments = [script, temp.path, manifest, Self.publicKeyBase64]
@@ -134,6 +154,7 @@ final class UpdateManager {
             do { try p.run() } catch {
                 try? FileManager.default.removeItem(at: temp)
                 try? FileManager.default.removeItem(atPath: manifest)
+                guard self.downloadGeneration == generation else { return }
                 DispatchQueue.main.async { self.downloadTask = nil }
                 self.emit(.failed("Could not run update verification."), "", 0)
                 return
@@ -145,9 +166,15 @@ final class UpdateManager {
             guard p.terminationStatus == 0 else {
                 try? FileManager.default.removeItem(at: temp)
                 try? FileManager.default.removeItem(atPath: manifest)
+                guard self.downloadGeneration == generation else { return }
                 DispatchQueue.main.async { self.downloadTask = nil }
                 let reason = out.isEmpty ? "unknown reason" : out
                 self.emit(.failed("Update verification failed: \(reason)"), "", 0)
+                return
+            }
+            guard self.downloadGeneration == generation else {
+                try? FileManager.default.removeItem(at: temp)
+                try? FileManager.default.removeItem(atPath: manifest)
                 return
             }
             do {
@@ -158,6 +185,7 @@ final class UpdateManager {
             } catch {
                 try? FileManager.default.removeItem(at: temp)
                 try? FileManager.default.removeItem(atPath: manifest)
+                guard self.downloadGeneration == generation else { return }
                 DispatchQueue.main.async { self.downloadTask = nil }
                 self.emit(.failed("Could not save the update: \(error.localizedDescription)"), "", 0)
             }
@@ -165,6 +193,7 @@ final class UpdateManager {
     }
 
     func cancel() {
+        downloadGeneration += 1
         downloadTask?.cancel()
         downloadTask = nil
         try? FileManager.default.removeItem(atPath: dmgPath)
