@@ -60,9 +60,13 @@ final class UpdateManager {
         emit(.checking, "Checking for updates…", 0)
         var req = URLRequest(url: URL(string: Self.api)!)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        dataTask = URLSession.shared.dataTask(with: req) { [weak self] data, _, error in
+        dataTask = URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
             guard let self else { return }
             DispatchQueue.main.async { self.dataTask = nil }
+            if (response as? HTTPURLResponse)?.statusCode == 404 {
+                self.emit(.upToDate, "No releases published yet.", 0)
+                return
+            }
             guard let data, error == nil,
                   let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
                 self.emit(.failed("Could not reach GitHub Releases."), "", 0)
@@ -174,7 +178,6 @@ final class UpdateManager {
             }
             guard self.downloadGeneration == generation else {
                 try? FileManager.default.removeItem(at: temp)
-                try? FileManager.default.removeItem(atPath: manifest)
                 return
             }
             do {

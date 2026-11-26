@@ -1213,27 +1213,37 @@ private struct UsagePanel: View {
         .background(Brand.surface.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
     }
 
+    private func usageNumber(_ n: Int) -> String {
+        let s = String(n)
+        var out = ""
+        for (i, ch) in s.enumerated() {
+            if i > 0 && (s.count - i) % 3 == 0 { out.append(".") }
+            out.append(ch)
+        }
+        return out
+    }
+
     var body: some View {
         Group {
             GlassCard {
                 SectionTitle(text: "OpenCode usage · last 24 hours")
                 HStack(alignment: .top, spacing: 12) {
-                    tile("Tokens", "\(model.usage.tokens)", "input + output")
-                    tile("Messages", "\(model.usage.messages)", "answers counted")
-                    tile("Chats", "\(model.usage.chats)", "sessions seen")
+                    tile("Tokens", usageNumber(model.usage.tokens), "input + output")
+                    tile("Messages", usageNumber(model.usage.messages), "answers counted")
+                    tile("Chats", usageNumber(model.usage.chats), "sessions seen")
                 }
             }
             GlassCard {
                 SectionTitle(text: "Rotations")
                 HStack(alignment: .top, spacing: 12) {
-                    tile("Today", "\(model.usage.rotationsToday)", "since daily reset")
-                    tile("All time", "\(model.usage.rotationsAll)", "every address tried")
-                    tile("Worked", "\(model.usage.goodIPs)", "verified new IPs")
+                    tile("Today", usageNumber(model.usage.rotationsToday), "since daily reset")
+                    tile("All time", usageNumber(model.usage.rotationsAll), "every address tried")
+                    tile("Worked", usageNumber(model.usage.goodIPs), "verified new IPs")
                 }
                 HStack(alignment: .top, spacing: 12) {
-                    tile("Used up", "\(model.usage.usedUp)", "blacklisted /64s")
-                    tile("Limits", "\(model.usage.limits)", "limit lines in guard log")
-                    tile("Continues", "\(model.usage.continues)", "sent to chats")
+                    tile("Used up", usageNumber(model.usage.usedUp), "blacklisted /64s")
+                    tile("Limits", usageNumber(model.usage.limits), "limit lines in guard log")
+                    tile("Continues", usageNumber(model.usage.continues), "sent to chats")
                 }
             }
             GlassCard {
@@ -1331,10 +1341,9 @@ private struct SettingsPanel: View {
             .onAppear {
                 model.loadEgressConfig()
                 model.loadRouteDraft()
-                model.loadUsage()
             }
             GlassCard {
-                SectionTitle(text: "Startup & usage")
+                SectionTitle(text: "Startup")
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Start OpenHop at login").font(.system(size: 14, weight: .semibold))
@@ -1346,8 +1355,6 @@ private struct SettingsPanel: View {
                                              set: { model.setLaunchAtLogin($0) }))
                         .labelsHidden().tint(Brand.green)
                 }
-                Text("Local usage: \(model.usageText). Nothing is uploaded.")
-                    .font(.system(size: 11)).foregroundStyle(Brand.muted)
             }
             GlassCard {
                 SectionTitle(text: "About")
