@@ -70,6 +70,10 @@ final class UpdateManager {
             self.dmgURL = release.assets.first { $0.name == "OpenHop.dmg" }
                 .flatMap { URL(string: $0.browserDownloadURL) }
             if Self.compareVersions(version, Self.appVersion) > 0 {
+                guard self.dmgURL != nil else {
+                    self.emit(.failed("Release \(version) has no OpenHop.dmg asset."), "", 0)
+                    return
+                }
                 self.emit(.available(version), "Version \(version) is available.", 0)
             } else {
                 self.emit(.upToDate, "You are up to date (v\(Self.appVersion)).", 0)

@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" macos/Info.plist
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(echo "$VER" | tr -d '.')" macos/Info.plist
 bash build-dmg.sh
-git add -A
+git add macos/Info.plist
 git commit -m "Release v$VER"
 git tag "v$VER"
 git push

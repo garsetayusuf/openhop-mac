@@ -100,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         }
         model.setupNotifications()
         NotificationCenter.default.addObserver(self, selector: #selector(openFromMenu), name: .openhopOpenWindow, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openSettingsFromUpdateNotification), name: .openhopOpenSettings, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(continueSetup), name: .openhopSetupContinue, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(forceQuit), name: .openhopQuitApp, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(toggleConnection), name: .openhopToggleConnection, object: nil)
@@ -188,8 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             menu.addItem(i)
         }
         add("Open OpenHop", #selector(openFromMenu), true)
-        add("Check for Updates…", #selector(checkUpdates), true)
         guard setupDone else { return }
+        add("Check for Updates…", #selector(checkUpdates), true)
         menu.addItem(NSMenuItem.separator())
         add(model.liveWarpConnected() || model.liveJobRunning("keeper") ? "Disconnect" : "Connect", #selector(toggleConnection), true)
         add("Rotate IP", #selector(rotateIP), setupDone && model.operationState == .running && !model.isBusy)
@@ -268,6 +269,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        show()
+    }
+
+    @objc private func openSettingsFromUpdateNotification() {
+        guard setupDone else { openFromMenu(); return }
+        store.section = 5
         show()
     }
 
@@ -359,6 +366,7 @@ extension Notification.Name {
     static let openhopRotateIP = Notification.Name("openhop.rotateIP")
     static let openhopToggleAutoRotate = Notification.Name("openhop.toggleAutoRotate")
     static let openhopUpdateRestart = Notification.Name("openhop.updateRestart")
+    static let openhopOpenSettings = Notification.Name("openhop.openSettings")
 }
 
 private struct SetupGateView: View {

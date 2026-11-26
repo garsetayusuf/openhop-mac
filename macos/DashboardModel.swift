@@ -478,6 +478,18 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         }
     }
 
+    func notifyUpdate(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["openhop.update": true]
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { [weak self] error in
+            self?.recordNote("notification posted title=\(title) error=\(error?.localizedDescription ?? "none")")
+        }
+    }
+
     func sendTestNotification() {
         notify(title: "OpenHop", body: "System notifications are working.")
     }
@@ -492,7 +504,8 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
         DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .openhopOpenWindow, object: nil)
+            let isUpdate = response.notification.request.content.userInfo["openhop.update"] as? Bool ?? false
+            NotificationCenter.default.post(name: isUpdate ? .openhopOpenSettings : .openhopOpenWindow, object: nil)
         }
         completionHandler()
     }
@@ -603,10 +616,23 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         let u = UpdateManager()
         u.onState = { [weak self] state, message, progress in
             DispatchQueue.main.async {
-                self?.updateState = state
-                self?.updateMessage = message
-                self?.updateProgress = progress
-                if case .available = state { self?.updateBadge = true }
+                guard let self else { return }
+                let wasAvailable: Bool
+                if case .available = self.updateState { wasAvailable = true } else { wasAvailable = false }
+                self.updateState = state
+                self.updateMessage = message
+                self.updateProgress = progress
+                switch state {
+                case .available(let v):
+                    self.updateBadge = true
+                    if !wasAvailable {
+                        self.notifyUpdate(title: "OpenHop update available", body: "Version \(v) is ready. Open Settings → About to update.")
+                    }
+                case .upToDate:
+                    self.updateBadge = false
+                default:
+                    break
+                }
             }
         }
         return u
@@ -616,7 +642,10 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     @Published var updateProgress: Double = 0
     @Published var updateBadge = false
 
-    func checkForUpdates() { updateBadge = false; updater.check() }
+    func checkForUpdates() {
+        guard updateState != .ready, updateState != .downloading else { return }
+        updater.check()
+    }
     func downloadUpdate() { updater.download() }
     func cancelUpdate() { updater.cancel() }
     func installUpdate() {
