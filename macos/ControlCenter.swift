@@ -350,6 +350,7 @@ extension Notification.Name {
     static let openhopToggleBackground = Notification.Name("openhop.toggleBackground")
     static let openhopRotateIP = Notification.Name("openhop.rotateIP")
     static let openhopToggleAutoRotate = Notification.Name("openhop.toggleAutoRotate")
+    static let openhopUpdateRestart = Notification.Name("openhop.updateRestart")
 }
 
 private struct SetupGateView: View {

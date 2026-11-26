@@ -597,6 +597,47 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         }
     }
 
+    // MARK: - Updates
+
+    lazy var updater: UpdateManager = {
+        let u = UpdateManager()
+        u.onState = { [weak self] state, message, progress in
+            DispatchQueue.main.async {
+                self?.updateState = state
+                self?.updateMessage = message
+                self?.updateProgress = progress
+                if case .available = state { self?.updateBadge = true }
+            }
+        }
+        return u
+    }()
+    @Published var updateState: UpdateState = .idle
+    @Published var updateMessage = ""
+    @Published var updateProgress: Double = 0
+    @Published var updateBadge = false
+
+    func checkForUpdates() { updateBadge = false; updater.check() }
+    func downloadUpdate() { updater.download() }
+    func cancelUpdate() { updater.cancel() }
+    func installUpdate() {
+        updater.install { [weak self] ok, message in
+            self?.updateMessage = message
+            if ok {
+                NotificationCenter.default.post(name: .openhopUpdateRestart, object: nil)
+            } else {
+                self?.updateState = .failed(message)
+                self?.notify(title: "OpenHop update", body: message)
+            }
+        }
+    }
+
+    func scheduleUpdateChecks() {
+        checkForUpdates()
+        Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { self?.checkForUpdates() }
+        }
+    }
+
     // MARK: - Launch gate
 
     @Published var setupChecks: [String: String] = [:]
