@@ -106,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NotificationCenter.default.addObserver(self, selector: #selector(toggleBackground), name: .openhopToggleBackground, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(rotateIP), name: .openhopRotateIP, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(toggleAutoRotate), name: .openhopToggleAutoRotate, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(restartAfterUpdate), name: .openhopUpdateRestart, object: nil)
+        model.scheduleUpdateChecks()
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(systemShutdown), name: NSWorkspace.willPowerOffNotification, object: nil)
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -186,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             menu.addItem(i)
         }
         add("Open OpenHop", #selector(openFromMenu), true)
+        add("Check for Updates…", #selector(checkUpdates), true)
         guard setupDone else { return }
         menu.addItem(NSMenuItem.separator())
         add(model.liveWarpConnected() || model.liveJobRunning("keeper") ? "Disconnect" : "Connect", #selector(toggleConnection), true)
@@ -335,6 +338,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func forceQuit() {
         explicitQuit = true
         model.shutdownForQuit()
+        NSApp.terminate(nil)
+    }
+    @objc private func checkUpdates() { model.checkForUpdates() }
+    @objc private func restartAfterUpdate() {
+        explicitQuit = true
         NSApp.terminate(nil)
     }
 }
@@ -1341,7 +1349,35 @@ private struct SettingsPanel: View {
                         Text("Mac port · native dashboard · local-only controls").font(.system(size: 11)).foregroundStyle(Brand.muted)
                     }
                     Spacer()
-                    StatusChip(text: "v3.8.1", color: Brand.amber)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Button(model.updateBadge ? "● v\(UpdateManager.appVersion)" : "v\(UpdateManager.appVersion)") {
+                            model.checkForUpdates()
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        Text("Check for updates")
+                            .font(.system(size: 10)).foregroundStyle(Brand.muted)
+                    }
+                }
+                if !model.updateMessage.isEmpty {
+                    Text(model.updateMessage).font(.system(size: 11)).foregroundStyle(Brand.amber)
+                }
+                HStack {
+                    if case .available(let v) = model.updateState {
+                        PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
+                                      accent: Brand.green) { model.downloadUpdate() }
+                    }
+                    if case .downloading = model.updateState {
+                        ProgressView(value: model.updateProgress).frame(width: 160)
+                        Button("Cancel") { model.cancelUpdate() }.buttonStyle(.bordered)
+                    }
+                    if case .ready = model.updateState {
+                        PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
+                                      accent: Brand.amber) { model.installUpdate() }
+                        Button("Cancel") { model.cancelUpdate() }.buttonStyle(.bordered)
+                    }
+                }
+                if case .failed(let error) = model.updateState {
+                    Text(error).font(.system(size: 11)).foregroundStyle(Brand.bad)
                 }
             }
             GlassCard {
