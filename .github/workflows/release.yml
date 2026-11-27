@@ -55,6 +55,22 @@ jobs:
           echo "VER=$VER" >> "$GITHUB_ENV"
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" macos/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(echo "$VER" | tr -d '.')" macos/Info.plist
+          # The release body is the single source of truth for the in-app "What's new" sheet.
+          {
+            echo "OpenHop for macOS $VER — signed update."
+            echo
+            if [ -n "$LAST" ]; then
+              git log --no-merges --pretty=format:'- %s%n%b' "$LAST"..HEAD > "$RUNNER_TEMP/commits.raw"
+              if [ -s "$RUNNER_TEMP/commits.raw" ]; then
+                head -c 6000 "$RUNNER_TEMP/commits.raw"
+                echo
+              else
+                echo "- Maintenance update."
+              fi
+            else
+              echo "- First signed release."
+            fi
+          } > "$RUNNER_TEMP/release-notes.md"
 
       - name: Build DMG
         run: bash build-dmg.sh
@@ -81,7 +97,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v$VER" dist/OpenHop.dmg dist/OpenHop.dmg.sha256 --verify-tag --title "v$VER" --notes "OpenHop for macOS v$VER"
+          gh release create "v$VER" dist/OpenHop.dmg dist/OpenHop.dmg.sha256 --verify-tag --title "v$VER" --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Wipe signing key
         if: always()

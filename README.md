@@ -229,7 +229,7 @@ This bumps `macos/Info.plist`, builds `dist/OpenHop.dmg`, commits and tags `v3.8
 
 ### Releases
 
-Every merge to `main` automatically builds and publishes a signed release: it bumps the patch version, builds the DMG, signs a `sha256` manifest, and attaches both files to a new GitHub release. The signature must match the public key embedded in `macos/UpdateManager.swift`; configure the matching private key as a repository secret named `UPDATE_SIGNING_KEY`:
+Every merge to `main` automatically builds and publishes a signed release: it bumps the patch version, builds the DMG, signs a `sha256` manifest, and attaches both files to a new GitHub release. Release notes are generated from commits since the previous tag and shown in the app's **What's new** sheet. The signature must match the public key embedded in `macos/UpdateManager.swift`; configure the matching private key as a repository secret named `UPDATE_SIGNING_KEY`:
 
 ```bash
 gh secret set UPDATE_SIGNING_KEY -R garsetayusuf/openhop-mac -b "$(base64 < "$HOME/Library/Application Support/openhop/signing/private.pem")"
