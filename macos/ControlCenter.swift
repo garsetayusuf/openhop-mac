@@ -1542,26 +1542,26 @@ private struct SettingsPanel: View {
                         .background(Brand.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.white.opacity(0.07), lineWidth: 1))
-                        VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Spacer()
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
                                           accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
                         }
                     }
                 case .downloading:
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text("Downloading \(Int(model.updateProgress * 100))%")
-                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Brand.amber)
-                            Spacer(minLength: 0)
-                        }
+                    HStack {
+                        Text("Downloading \(Int(model.updateProgress * 100))%")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(Brand.amber)
                         ProgressView(value: model.updateProgress)
-                            .progressViewStyle(.linear).tint(Brand.amber).frame(height: 6)
+                            .progressViewStyle(.linear).tint(Brand.amber).frame(width: 140)
+                        Spacer()
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
                             .pointingCursor()
                     }
                 case .ready:
-                    VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Spacer()
                         PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
                         Button("Cancel") { model.cancelUpdate() }
@@ -1569,7 +1569,8 @@ private struct SettingsPanel: View {
                             .pointingCursor()
                     }
                 default:
-                    VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Spacer()
                         PrimaryAction(title: "Check for updates",
                                       symbol: "arrow.triangle.2.circlepath", accent: Brand.amber, maxWidth: 300) {
                             model.checkForUpdates()
