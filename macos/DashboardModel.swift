@@ -614,9 +614,11 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
 
     lazy var updater: UpdateManager = {
         let u = UpdateManager()
-        u.onState = { [weak self] state, message, progress in
+        u.onState = { [weak self, weak u] state, message, progress in
+            let notes = u?.notes ?? ""
             DispatchQueue.main.async {
                 guard let self else { return }
+                self.updateNotes = notes
                 let wasAvailable: Bool
                 if case .available = self.updateState { wasAvailable = true } else { wasAvailable = false }
                 self.updateState = state
@@ -641,6 +643,8 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     @Published var updateMessage = ""
     @Published var updateProgress: Double = 0
     @Published var updateBadge = false
+    @Published var updateNotes = ""
+    @Published var showReleaseNotes = false
 
     func checkForUpdates() {
         guard updateState != .ready, updateState != .downloading else { return }

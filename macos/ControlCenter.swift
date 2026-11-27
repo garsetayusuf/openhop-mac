@@ -324,7 +324,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func windowWillClose(_ notification: Notification) {
-        // Window stays owned by the app; no activation-policy change needed.
+        // A closed NSWindow cannot be reshown; drop it so show() rebuilds it.
+        if notification.object as? NSWindow === window { window = nil }
     }
     @objc private func start() { guard setupDone else { return }; NotificationCenter.default.post(name: .openhopStart, object: nil) }
     @objc private func stop() { guard setupDone else { return }; NotificationCenter.default.post(name: .openhopStop, object: nil) }
@@ -1364,13 +1365,27 @@ private struct SettingsPanel: View {
                         Text("Mac port · native dashboard · local-only controls").font(.system(size: 11)).foregroundStyle(Brand.muted)
                     }
                     Spacer()
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Button(model.updateBadge ? "● v\(UpdateManager.appVersion)" : "v\(UpdateManager.appVersion)") {
+                    VStack(alignment: .trailing, spacing: 8) {
+                        Text("\(model.updateBadge ? "● " : "")Installed v\(UpdateManager.appVersion)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(model.updateBadge ? Brand.amber : Brand.text)
+                        Button {
                             model.checkForUpdates()
+                        } label: {
+                            Label("Check for updates", systemImage: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12, weight: .semibold))
                         }
-                        .buttonStyle(.bordered).controlSize(.small)
-                        Text("Check for updates")
-                            .font(.system(size: 10)).foregroundStyle(Brand.muted)
+                        .buttonStyle(.borderedProminent).tint(Brand.amber)
+                        .controlSize(.small).pointingCursor()
+                        if !model.updateNotes.isEmpty {
+                            Button {
+                                model.showReleaseNotes = true
+                            } label: {
+                                Label("What's new", systemImage: "doc.text")
+                                    .font(.system(size: 12, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered).controlSize(.small).pointingCursor()
+                        }
                     }
                 }
                 if !model.updateMessage.isEmpty {
@@ -1408,6 +1423,48 @@ private struct SettingsPanel: View {
                 }
             }
         }
+        .sheet(isPresented: Binding(get: { model.showReleaseNotes },
+                                    set: { model.showReleaseNotes = $0 })) {
+            ReleaseNotesView(notes: model.updateNotes)
+        }
+    }
+}
+
+private struct ReleaseNotesView: View {
+    let notes: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("What's new", systemImage: "doc.text")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Brand.text)
+                Spacer()
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Brand.muted)
+                }
+                .buttonStyle(.plain).pointingCursor()
+            }
+            ScrollView {
+                Text(notes)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Brand.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(minHeight: 140, maxHeight: 360)
+            PrimaryAction(title: "Done", symbol: "checkmark.circle", accent: Brand.green) { dismiss() }
+        }
+        .padding(20)
+        .frame(width: 540)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
+        .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
+        .padding(20)
+        .background(Brand.bg)
     }
 }
 
