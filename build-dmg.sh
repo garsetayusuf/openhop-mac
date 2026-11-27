@@ -18,12 +18,13 @@ rm -f "$RAW" "$DMG"
 hdiutil create -volname OpenHop -srcfolder "$STAGE" -ov -format UDRW "$RAW"
 
 echo "  arranging Finder window…"
-hdiutil attach "$RAW" -nobrowse -quiet
-osascript <<'EOF'
+MNT="$(mktemp -d "${TMPDIR:-/tmp}/openhop-mnt.XXXXXX")"
+hdiutil attach "$RAW" -nobrowse -quiet -mountpoint "$MNT"
+if ! osascript <<EOF
 tell application "Finder"
-  tell disk "OpenHop"
+  tell folder (POSIX file "$MNT")
     open
-    delay 1
+    delay 2
     set current view of container window to icon view
     set toolbar visible of container window to false
     set statusbar visible of container window to false
@@ -31,7 +32,7 @@ tell application "Finder"
     set vo to icon view options of container window
     set arrangement of vo to not arranged
     set icon size of vo to 96
-    set background picture of vo to POSIX file "/Volumes/OpenHop/.background.png"
+    set background picture of vo to POSIX file "$MNT/.background.png"
     set position of item "OpenHop.app" of container window to {130, 185}
     set position of item "Applications" of container window to {470, 185}
     close
@@ -43,8 +44,11 @@ tell application "Finder"
   end tell
 end tell
 EOF
-SetFile -a C /Volumes/OpenHop || true
-hdiutil detach /Volumes/OpenHop -quiet
+then
+  echo "  Finder arrangement skipped — DMG will still be valid"
+fi
+SetFile -a C "$MNT" || true
+hdiutil detach "$MNT" -quiet
 
 hdiutil convert "$RAW" -format UDZO -o "$DMG" -ov
 hdiutil verify "$DMG"
