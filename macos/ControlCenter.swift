@@ -498,6 +498,39 @@ private struct SectionTitle: View {
     }
 }
 
+// Explicit fills: the prominent style picks a dark fill for custom tints on this
+// window's dark appearance, which made light Brand accents unreadable.
+private struct AccentButtonStyle: ButtonStyle {
+    let accent: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .background(accent, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.82 : 1) : 0.45)
+    }
+}
+
+private struct OutlineButtonStyle: ButtonStyle {
+    let accent: Color
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(accent)
+            .frame(minHeight: 40)
+            .padding(.horizontal, 14)
+            .background(accent.opacity(configuration.isPressed ? 0.22 : 0.10),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(accent.opacity(0.5), lineWidth: 1))
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
 private struct PrimaryAction: View {
     let title: String
     let symbol: String
@@ -507,11 +540,8 @@ private struct PrimaryAction: View {
         Button(action: action) {
             Label(title, systemImage: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .frame(maxWidth: .infinity, minHeight: 40)
         }
-        .buttonStyle(.borderedProminent)
-        .tint(accent)
-        .buttonBorderShape(.roundedRectangle)
+        .buttonStyle(AccentButtonStyle(accent: accent))
         .pointingCursor()
     }
 }
@@ -1489,11 +1519,8 @@ private struct SettingsPanel: View {
                             if !model.updateNotes.isEmpty {
                                 Button { model.showReleaseNotes = true } label: {
                                     Label("What's new", systemImage: "doc.text")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .frame(minHeight: 40)
                                 }
-                                .buttonStyle(.bordered).tint(Brand.amber)
-                                .buttonBorderShape(.roundedRectangle)
+                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
                                 .pointingCursor()
                             }
                         }
@@ -1505,7 +1532,8 @@ private struct SettingsPanel: View {
                         HStack {
                             Spacer()
                             Button("Cancel") { model.cancelUpdate() }
-                                .buttonStyle(.bordered).tint(Brand.amber).pointingCursor()
+                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                                .pointingCursor()
                         }
                     }
                 case .ready:
@@ -1513,7 +1541,8 @@ private struct SettingsPanel: View {
                         PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber) { model.installUpdate() }
                         Button("Cancel") { model.cancelUpdate() }
-                            .buttonStyle(.bordered).tint(Brand.muted).frame(minHeight: 40).pointingCursor()
+                            .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
+                            .pointingCursor()
                     }
                 default:
                     VStack(alignment: .leading, spacing: 10) {
@@ -1527,9 +1556,9 @@ private struct SettingsPanel: View {
                                 Spacer()
                                 Button { model.showReleaseNotes = true } label: {
                                     Label("What's new", systemImage: "doc.text")
-                                        .font(.system(size: 12, weight: .semibold))
                                 }
-                                .buttonStyle(.bordered).tint(Brand.amber).pointingCursor()
+                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                                .pointingCursor()
                             }
                         }
                     }
