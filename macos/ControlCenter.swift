@@ -1532,7 +1532,7 @@ private struct SettingsPanel: View {
                         .background(Brand.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.white.opacity(0.07), lineWidth: 1))
-                        HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 10) {
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
                                           accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
                             if !model.updateNotes.isEmpty {
@@ -1553,20 +1553,24 @@ private struct SettingsPanel: View {
                         }
                         ProgressView(value: model.updateProgress)
                             .progressViewStyle(.linear).tint(Brand.amber).frame(height: 6)
-                        HStack {
-                            Spacer()
-                            Button("Cancel") { model.cancelUpdate() }
-                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
-                                .pointingCursor()
-                        }
+                        Button("Cancel") { model.cancelUpdate() }
+                            .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                            .pointingCursor()
                     }
                 case .ready:
-                    HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 10) {
                         PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
+                        if !model.updateNotes.isEmpty {
+                            Button { model.showReleaseNotes = true } label: {
+                                Label("What's new", systemImage: "doc.text")
+                            }
+                            .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                            .pointingCursor()
+                        }
                     }
                 default:
                     VStack(alignment: .leading, spacing: 10) {
@@ -1576,14 +1580,11 @@ private struct SettingsPanel: View {
                         }
                         .disabled(model.updateState == .checking)
                         if !model.updateNotes.isEmpty {
-                            HStack {
-                                Spacer()
-                                Button { model.showReleaseNotes = true } label: {
-                                    Label("What's new", systemImage: "doc.text")
-                                }
-                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
-                                .pointingCursor()
+                            Button { model.showReleaseNotes = true } label: {
+                                Label("What's new", systemImage: "doc.text")
                             }
+                            .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                            .pointingCursor()
                         }
                     }
                 }
