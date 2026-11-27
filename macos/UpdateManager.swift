@@ -270,6 +270,10 @@ final class UpdateManager {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit()
                 return (p.terminationStatus, String(data: data, encoding: .utf8) ?? "")
             }
+            func reason(_ result: (Int32, String)) -> String {
+                let out = result.1.trimmingCharacters(in: .whitespacesAndNewlines)
+                return "exit \(result.0)" + (out.isEmpty ? "" : ": \(out)")
+            }
             func cleanup(keepBackup: Bool = false) {
                 try? FileManager.default.removeItem(atPath: mount)
                 if !keepBackup { try? FileManager.default.removeItem(atPath: stage) }
@@ -281,7 +285,7 @@ final class UpdateManager {
             let attach = run("/usr/bin/hdiutil", ["attach", dmg, "-nobrowse", "-quiet", "-mountpoint", mount])
             guard attach.0 == 0 else {
                 cleanup()
-                DispatchQueue.main.async { completion(false, "Could not mount the update (exit \(attach.0)).") }
+                DispatchQueue.main.async { completion(false, "Could not mount the update (\(reason(attach))).") }
                 return
             }
             let source = mount + "/OpenHop.app"
@@ -292,11 +296,18 @@ final class UpdateManager {
                 DispatchQueue.main.async { completion(false, "The DMG has no OpenHop.app.") }
                 return
             }
-            let copy = run("/bin/cp", ["-R", source, staged])
+            try? FileManager.default.removeItem(atPath: staged)
+            let stageError: Error?
+            do {
+                try FileManager.default.copyItem(atPath: source, toPath: staged)
+                stageError = nil
+            } catch {
+                stageError = error
+            }
             _ = run("/usr/bin/hdiutil", ["detach", mount, "-quiet"])
-            guard copy.0 == 0 else {
+            if let stageError {
                 cleanup()
-                DispatchQueue.main.async { completion(false, "Could not stage the update (exit \(copy.0)).") }
+                DispatchQueue.main.async { completion(false, "Could not stage the update: \(stageError.localizedDescription)") }
                 return
             }
             let target = self.installTarget
@@ -304,12 +315,12 @@ final class UpdateManager {
             let moveOld = run("/bin/mv", [target, backup])
             let install = run("/bin/mv", [staged, target])
             if install.0 != 0 {
-                var message = "Could not replace the app (exit \(install.0))."
+                var message = "Could not replace the app (\(reason(install)))."
                 var keepBackup = false
                 if moveOld.0 == 0 {
                     let rollback = run("/bin/mv", [backup, target])
                     if rollback.0 != 0 {
-                        message += " Could not restore the previous app (exit \(rollback.0)); backup kept at \(backup)."
+                        message += " Could not restore the previous app (\(reason(rollback))); backup kept at \(backup)."
                         keepBackup = true
                     }
                 }
@@ -327,7 +338,7 @@ final class UpdateManager {
             cleanup()
             let reopen = run("/usr/bin/open", ["-n", target])
             guard reopen.0 == 0 else {
-                DispatchQueue.main.async { completion(false, "Installed but could not relaunch (exit \(reopen.0)).") }
+                DispatchQueue.main.async { completion(false, "Installed but could not relaunch (\(reason(reopen))).") }
                 return
             }
             DispatchQueue.main.async { completion(true, "Installed. Restarting…") }
