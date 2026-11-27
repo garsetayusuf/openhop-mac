@@ -317,17 +317,46 @@ final class UpdateManager {
             let mod = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
             let backup = stage + "/OpenHop-old.app"
-            let moveOld = run("/bin/mv", [target, backup])
+            // Back up the installed app before touching it; without a copy there is no rollback.
+            var backupResult: (Int32, String)?
+            if FileManager.default.fileExists(atPath: target) {
+                backupResult = run("/bin/cp", ["-Rp", target, backup])
+                if backupResult?.0 != 0 { try? FileManager.default.removeItem(atPath: backup) }
+            }
+            let backupOK = backupResult?.0 == 0
+
+            // Remove the old app first so mv cannot land inside an existing directory.
+            let remove = run("/bin/rm", ["-rf", target])
+            if remove.0 != 0 {
+                // Escape for a shell single-quoted path, then for the AppleScript string literal.
+                let quoted = target.replacingOccurrences(of: "'", with: "'\\''")
+                let shell = "rm -rf '\(quoted)'"
+                let script = shell.replacingOccurrences(of: "\\", with: "\\\\")
+                                  .replacingOccurrences(of: "\"", with: "\\\"")
+                let admin = run("/usr/bin/osascript", ["-e", "do shell script \"\(script)\" with administrator privileges"])
+                if admin.0 != 0 {
+                    var message = "Could not remove the installed app (\(reason(remove)); admin retry: \(reason(admin)))."
+                    if let backupResult, backupResult.0 != 0 {
+                        message += " Backup failed: \(reason(backupResult))."
+                    }
+                    cleanup(keepBackup: backupOK)
+                    DispatchQueue.main.async { completion(false, message) }
+                    return
+                }
+            }
+
             let install = run("/bin/mv", [staged, target])
             if install.0 != 0 {
                 var message = "Could not replace the app (\(reason(install)))."
                 var keepBackup = false
-                if moveOld.0 == 0 {
-                    let rollback = run("/bin/mv", [backup, target])
-                    if rollback.0 != 0 {
-                        message += " Could not restore the previous app (\(reason(rollback))); backup kept at \(backup)."
+                if backupOK {
+                    let restore = run("/bin/cp", ["-Rp", backup, target])
+                    if restore.0 != 0 {
+                        message += " Could not restore the previous app (\(reason(restore))); backup kept at \(backup)."
                         keepBackup = true
                     }
+                } else if let backupResult {
+                    message += " No usable backup: \(reason(backupResult))."
                 }
                 cleanup(keepBackup: keepBackup)
                 DispatchQueue.main.async { completion(false, message) }
