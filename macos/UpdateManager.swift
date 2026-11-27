@@ -58,6 +58,16 @@ final class UpdateManager {
     }
     private var manifestPath: String { dmgPath + ".sha256" }
 
+    static let setupIdentityKey = "openhop.setupIdentity"
+
+    static func appIdentity(_ bundle: Bundle = .main) -> String {
+        let path = bundle.executableURL?.path ?? bundle.bundlePath
+        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        let mod = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+        return "\(path)|\(Int(mod))|\(size)"
+    }
+
     static func compareVersions(_ a: String, _ b: String) -> Int {
         let ax = a.trimmingCharacters(in: .init(charactersIn: "v")).split(separator: ".").map { Int($0) ?? 0 }
         let bx = b.trimmingCharacters(in: .init(charactersIn: "v")).split(separator: ".").map { Int($0) ?? 0 }
@@ -307,6 +317,13 @@ final class UpdateManager {
                 DispatchQueue.main.async { completion(false, message) }
                 return
             }
+            let exeName = (NSDictionary(contentsOfFile: staged + "/Contents/Info.plist")?["CFBundleExecutable"] as? String) ?? "OpenHop"
+            let newExe = staged + "/Contents/MacOS/" + exeName
+            let attrs = try? FileManager.default.attributesOfItem(atPath: newExe)
+            let mod = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+            UserDefaults.standard.set("\(target)/Contents/MacOS/\(exeName)|\(Int(mod))|\(size)",
+                                      forKey: UpdateManager.setupIdentityKey)
             cleanup()
             let reopen = run("/usr/bin/open", ["-n", target])
             guard reopen.0 == 0 else {

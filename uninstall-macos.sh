@@ -27,6 +27,11 @@ fi
 
 rm -f "$BIN_DIR/openhop-hop" "$BIN_DIR/openhop-doctor"
 rm -rf "$DEST" && ok "scripts + guard state removed"
+defaults delete com.openhop.controlcenter openhop.setupCompleted >/dev/null 2>&1 || true
+defaults delete com.openhop.controlcenter.test openhop.setupCompleted >/dev/null 2>&1 || true
+defaults delete com.openhop.controlcenter openhop.setupIdentity >/dev/null 2>&1 || true
+defaults delete com.openhop.controlcenter.test openhop.setupIdentity >/dev/null 2>&1 || true
+ok "first-run setup flag cleared"
 
 if command -v warp-cli >/dev/null 2>&1; then
   warp-cli --accept-tos disconnect >/dev/null 2>&1 && ok "warp tunnel disconnected (package left installed)" || true

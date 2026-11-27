@@ -92,7 +92,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         buildMainMenu()
         setupStatusItem()
         model.checkSetup()
-        if UserDefaults.standard.bool(forKey: setupCompletedKey) {
+        let identityMatches = UserDefaults.standard.string(forKey: UpdateManager.setupIdentityKey)
+            == UpdateManager.appIdentity()
+        if UserDefaults.standard.bool(forKey: setupCompletedKey) && identityMatches && model.setupComplete {
             setupDone = true
             buildWindow()
         } else {
@@ -226,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         guard model.setupComplete else { return }
         setupDone = true
         UserDefaults.standard.set(true, forKey: setupCompletedKey)
+        UserDefaults.standard.set(UpdateManager.appIdentity(), forKey: UpdateManager.setupIdentityKey)
         setupWindow?.orderOut(nil)
         setupWindow = nil
         if window == nil { buildWindow() }
