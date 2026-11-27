@@ -311,6 +311,11 @@ final class UpdateManager {
                 return
             }
             let target = self.installTarget
+            let exeName = (NSDictionary(contentsOfFile: staged + "/Contents/Info.plist")?["CFBundleExecutable"] as? String) ?? "OpenHop"
+            let newExe = staged + "/Contents/MacOS/" + exeName
+            let attrs = try? FileManager.default.attributesOfItem(atPath: newExe)
+            let mod = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+            let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
             let backup = stage + "/OpenHop-old.app"
             let moveOld = run("/bin/mv", [target, backup])
             let install = run("/bin/mv", [staged, target])
@@ -328,11 +333,6 @@ final class UpdateManager {
                 DispatchQueue.main.async { completion(false, message) }
                 return
             }
-            let exeName = (NSDictionary(contentsOfFile: staged + "/Contents/Info.plist")?["CFBundleExecutable"] as? String) ?? "OpenHop"
-            let newExe = staged + "/Contents/MacOS/" + exeName
-            let attrs = try? FileManager.default.attributesOfItem(atPath: newExe)
-            let mod = (attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-            let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
             UserDefaults.standard.set("\(target)/Contents/MacOS/\(exeName)|\(Int(mod))|\(size)",
                                       forKey: UpdateManager.setupIdentityKey)
             cleanup()
