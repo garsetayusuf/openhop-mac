@@ -1509,10 +1509,17 @@ private struct SettingsPanel: View {
                 Hairline()
                 HStack(alignment: .firstTextBaseline) {
                     SectionTitle(text: "Installed version")
-                    Spacer(minLength: 12)
                     Text("v\(UpdateManager.appVersion)")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Brand.text)
+                    Spacer(minLength: 12)
+                    if !model.updateNotes.isEmpty {
+                        Button { model.showReleaseNotes = true } label: {
+                            Label("What's new", systemImage: "doc.text")
+                        }
+                        .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
+                        .pointingCursor()
+                    }
                 }
             }
             GlassCard {
@@ -1535,13 +1542,6 @@ private struct SettingsPanel: View {
                         VStack(alignment: .leading, spacing: 10) {
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
                                           accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
-                            if !model.updateNotes.isEmpty {
-                                Button { model.showReleaseNotes = true } label: {
-                                    Label("What's new", systemImage: "doc.text")
-                                }
-                                .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
-                                .pointingCursor()
-                            }
                         }
                     }
                 case .downloading:
@@ -1564,13 +1564,6 @@ private struct SettingsPanel: View {
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
-                        if !model.updateNotes.isEmpty {
-                            Button { model.showReleaseNotes = true } label: {
-                                Label("What's new", systemImage: "doc.text")
-                            }
-                            .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
-                            .pointingCursor()
-                        }
                     }
                 default:
                     VStack(alignment: .leading, spacing: 10) {
@@ -1579,13 +1572,6 @@ private struct SettingsPanel: View {
                             model.checkForUpdates()
                         }
                         .disabled(model.updateState == .checking)
-                        if !model.updateNotes.isEmpty {
-                            Button { model.showReleaseNotes = true } label: {
-                                Label("What's new", systemImage: "doc.text")
-                            }
-                            .buttonStyle(OutlineButtonStyle(accent: Brand.amber))
-                            .pointingCursor()
-                        }
                     }
                 }
             }
