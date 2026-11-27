@@ -318,45 +318,51 @@ final class UpdateManager {
             let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
             let backup = stage + "/OpenHop-old.app"
             // Back up the installed app before touching it; without a copy there is no rollback.
-            var backupResult: (Int32, String)?
+            var backupOK = false
+            var backupError: String?
             if FileManager.default.fileExists(atPath: target) {
-                backupResult = run("/bin/cp", ["-Rp", target, backup])
-                if backupResult?.0 != 0 { try? FileManager.default.removeItem(atPath: backup) }
+                do {
+                    try FileManager.default.copyItem(atPath: target, toPath: backup)
+                    backupOK = true
+                } catch {
+                    backupError = error.localizedDescription
+                    try? FileManager.default.removeItem(atPath: backup)
+                }
             }
-            let backupOK = backupResult?.0 == 0
 
-            // Remove the old app first so mv cannot land inside an existing directory.
-            let remove = run("/bin/rm", ["-rf", target])
-            if remove.0 != 0 {
+            // Remove the old app first so the new one cannot land inside an existing directory.
+            try? FileManager.default.removeItem(atPath: target)
+            if FileManager.default.fileExists(atPath: target) {
                 // Escape for a shell single-quoted path, then for the AppleScript string literal.
                 let quoted = target.replacingOccurrences(of: "'", with: "'\\''")
                 let shell = "rm -rf '\(quoted)'"
                 let script = shell.replacingOccurrences(of: "\\", with: "\\\\")
                                   .replacingOccurrences(of: "\"", with: "\\\"")
                 let admin = run("/usr/bin/osascript", ["-e", "do shell script \"\(script)\" with administrator privileges"])
-                if admin.0 != 0 {
-                    var message = "Could not remove the installed app (\(reason(remove)); admin retry: \(reason(admin)))."
-                    if let backupResult, backupResult.0 != 0 {
-                        message += " Backup failed: \(reason(backupResult))."
-                    }
+                if admin.0 != 0 || FileManager.default.fileExists(atPath: target) {
+                    let detail = admin.0 != 0 ? reason(admin) : "the app is still present after the admin retry"
+                    var message = "Could not remove the installed app (\(detail))."
+                    if let backupError { message += " Backup failed: \(backupError)." }
                     cleanup(keepBackup: backupOK)
                     DispatchQueue.main.async { completion(false, message) }
                     return
                 }
             }
 
-            let install = run("/bin/mv", [staged, target])
-            if install.0 != 0 {
-                var message = "Could not replace the app (\(reason(install)))."
+            do {
+                try FileManager.default.moveItem(atPath: staged, toPath: target)
+            } catch {
+                var message = "Could not replace the app: \(error.localizedDescription)."
                 var keepBackup = false
                 if backupOK {
-                    let restore = run("/bin/cp", ["-Rp", backup, target])
-                    if restore.0 != 0 {
-                        message += " Could not restore the previous app (\(reason(restore))); backup kept at \(backup)."
+                    do {
+                        try FileManager.default.copyItem(atPath: backup, toPath: target)
+                    } catch {
+                        message += " Could not restore the previous app: \(error.localizedDescription); backup kept at \(backup)."
                         keepBackup = true
                     }
-                } else if let backupResult {
-                    message += " No usable backup: \(reason(backupResult))."
+                } else if let backupError {
+                    message += " No usable backup: \(backupError)."
                 }
                 cleanup(keepBackup: keepBackup)
                 DispatchQueue.main.async { completion(false, message) }
