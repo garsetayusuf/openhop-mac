@@ -33,6 +33,7 @@ final class UpdateManager {
     private var dataTask: URLSessionDataTask?
     private var downloadTask: URLSessionDownloadTask?
     private var downloadGeneration = 0
+    private var checkGeneration = 0
     private var progressTimer: Timer?
 
     private func stopProgressTimer() {
@@ -69,13 +70,18 @@ final class UpdateManager {
     }
 
     func check() {
-        guard dataTask == nil, downloadTask == nil else { return }
+        guard downloadTask == nil else { return }
+        checkGeneration += 1
+        let generation = checkGeneration
+        dataTask?.cancel()
+        dataTask = nil
         emit(.checking, "Checking for updates…", 0)
         var req = URLRequest(url: URL(string: Self.api)!)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         dataTask = URLSession.shared.dataTask(with: req) { [weak self] data, response, error in
             guard let self else { return }
-            DispatchQueue.main.async { self.dataTask = nil }
+            guard self.checkGeneration == generation else { return }
+            self.dataTask = nil
             if (response as? HTTPURLResponse)?.statusCode == 404 {
                 self.emit(.upToDate, "No releases published yet.", 0)
                 return
