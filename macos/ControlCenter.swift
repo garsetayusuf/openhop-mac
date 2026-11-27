@@ -1543,9 +1543,9 @@ private struct SettingsPanel: View {
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.white.opacity(0.07), lineWidth: 1))
                         HStack {
-                            Spacer()
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
                                           accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
+                            Spacer(minLength: 0)
                         }
                     }
                 case .downloading:
@@ -1561,12 +1561,12 @@ private struct SettingsPanel: View {
                     }
                 case .ready:
                     HStack {
-                        Spacer()
                         if model.updateInstalling { ProgressView().controlSize(.small) }
                         PrimaryAction(title: model.updateInstalling ? "Installing…" : "Install & Restart",
                                       symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
                             .disabled(model.updateInstalling)
+                        Spacer(minLength: 0)
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
@@ -1574,11 +1574,11 @@ private struct SettingsPanel: View {
                     }
                 default:
                     HStack {
-                        Spacer()
                         PrimaryAction(title: "Check for updates",
                                       symbol: "arrow.triangle.2.circlepath", accent: Brand.amber, maxWidth: 300) {
                             model.checkForUpdates()
                         }
+                        Spacer(minLength: 0)
                     }
                 }
             }
