@@ -320,7 +320,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             NotificationCenter.default.post(name: .openhopQuitApp, object: nil)
             return false
         }
-        return true
+        if model.keepInBackground {
+            self.window?.orderOut(nil)
+            return false
+        }
+        model.shutdownForQuit()
+        explicitQuit = true
+        NSApp.terminate(nil)
+        return false
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -1260,6 +1267,84 @@ private struct UsagePanel: View {
     }
 }
 
+private struct UpdateStatusLine: View {
+    let state: UpdateState
+    let message: String
+    let badge: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(color)
+                    if badge, case .available = state {
+                        Circle().frame(width: 6, height: 6).foregroundStyle(Brand.amber)
+                    }
+                }
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Brand.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(color.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(color.opacity(0.22), lineWidth: 1))
+    }
+
+    private var title: String {
+        switch state {
+        case .idle: return "Ready to check"
+        case .checking: return "Checking for updates"
+        case .upToDate: return "Up to date"
+        case .available(let v): return "Version \(v) is available"
+        case .downloading: return "Downloading update"
+        case .ready: return "Ready to install"
+        case .failed: return "Update failed"
+        }
+    }
+    private var detail: String {
+        switch state {
+        case .idle: return message.isEmpty ? "Check to see whether a newer version is available." : message
+        case .checking: return message.isEmpty ? "Looking for the latest release." : message
+        case .upToDate: return message.isEmpty ? "You are running the latest version." : message
+        case .available: return "Download and install when you are ready."
+        case .downloading: return message.isEmpty ? "Preparing the verified update." : message
+        case .ready: return message.isEmpty ? "Verified and ready to install." : message
+        case .failed(let error): return error.isEmpty ? message : error
+        }
+    }
+    private var symbol: String {
+        switch state {
+        case .idle: return "clock"
+        case .checking: return "arrow.triangle.2.circlepath"
+        case .upToDate: return "checkmark.circle.fill"
+        case .available: return "arrow.down.circle.fill"
+        case .downloading: return "arrow.down.circle"
+        case .ready: return "checkmark.shield.fill"
+        case .failed: return "xmark.circle.fill"
+        }
+    }
+    private var color: Color {
+        switch state {
+        case .idle: return Brand.muted
+        case .checking, .downloading, .available: return Brand.amber
+        case .upToDate, .ready: return Brand.green
+        case .failed: return Brand.bad
+        }
+    }
+}
+
 private struct SettingsPanel: View {
     @EnvironmentObject var model: DashboardModel
     private let endpoints = ["automatic", "162.159.192.1:2408", "162.159.193.1:500",
@@ -1359,55 +1444,95 @@ private struct SettingsPanel: View {
             }
             GlassCard {
                 SectionTitle(text: "About")
-                HStack {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "shield.checkered")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 36, height: 36)
+                        .background(Brand.amber, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     VStack(alignment: .leading, spacing: 3) {
                         Text("OpenHop Control Center").font(.system(size: 14, weight: .semibold))
-                        Text("Mac port · native dashboard · local-only controls").font(.system(size: 11)).foregroundStyle(Brand.muted)
+                        Text("Mac port · native dashboard · local-only controls")
+                            .font(.system(size: 11)).foregroundStyle(Brand.muted)
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 8) {
-                        Text("\(model.updateBadge ? "● " : "")Installed v\(UpdateManager.appVersion)")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(model.updateBadge ? Brand.amber : Brand.text)
-                        Button {
-                            model.checkForUpdates()
-                        } label: {
-                            Label("Check for updates", systemImage: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 12, weight: .semibold))
+                    Spacer(minLength: 0)
+                }
+                Hairline()
+                HStack(alignment: .firstTextBaseline) {
+                    SectionTitle(text: "Installed version")
+                    Spacer(minLength: 12)
+                    Text("v\(UpdateManager.appVersion)")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Brand.text)
+                }
+            }
+            GlassCard {
+                SectionTitle(text: "Updates")
+                UpdateStatusLine(state: model.updateState, message: model.updateMessage, badge: model.updateBadge)
+                switch model.updateState {
+                case .available(let v):
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(text: "Latest version")
+                            Spacer(minLength: 12)
+                            Text(v)
+                                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Brand.amber)
                         }
-                        .buttonStyle(.borderedProminent).tint(Brand.amber)
-                        .controlSize(.small).pointingCursor()
-                        if !model.updateNotes.isEmpty {
-                            Button {
-                                model.showReleaseNotes = true
-                            } label: {
-                                Label("What's new", systemImage: "doc.text")
-                                    .font(.system(size: 12, weight: .semibold))
+                        .padding(12)
+                        .background(Brand.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.07), lineWidth: 1))
+                        HStack(spacing: 10) {
+                            PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
+                                          accent: Brand.green) { model.downloadUpdate() }
+                            if !model.updateNotes.isEmpty {
+                                Button { model.showReleaseNotes = true } label: {
+                                    Label("What's new", systemImage: "doc.text")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .frame(minHeight: 40)
+                                }
+                                .buttonStyle(.bordered).tint(Brand.amber)
+                                .buttonBorderShape(.roundedRectangle)
+                                .pointingCursor()
                             }
-                            .buttonStyle(.bordered).controlSize(.small).pointingCursor()
                         }
                     }
-                }
-                if !model.updateMessage.isEmpty {
-                    Text(model.updateMessage).font(.system(size: 11)).foregroundStyle(Brand.amber)
-                }
-                HStack {
-                    if case .available(let v) = model.updateState {
-                        PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
-                                      accent: Brand.green) { model.downloadUpdate() }
+                case .downloading:
+                    VStack(alignment: .leading, spacing: 10) {
+                        ProgressView(value: model.updateProgress)
+                            .progressViewStyle(.linear).tint(Brand.amber).frame(height: 6)
+                        HStack {
+                            Spacer()
+                            Button("Cancel") { model.cancelUpdate() }
+                                .buttonStyle(.bordered).tint(Brand.amber).pointingCursor()
+                        }
                     }
-                    if case .downloading = model.updateState {
-                        ProgressView(value: model.updateProgress).frame(width: 160)
-                        Button("Cancel") { model.cancelUpdate() }.buttonStyle(.bordered)
-                    }
-                    if case .ready = model.updateState {
+                case .ready:
+                    HStack(spacing: 10) {
                         PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber) { model.installUpdate() }
-                        Button("Cancel") { model.cancelUpdate() }.buttonStyle(.bordered)
+                        Button("Cancel") { model.cancelUpdate() }
+                            .buttonStyle(.bordered).tint(Brand.muted).frame(minHeight: 40).pointingCursor()
                     }
-                }
-                if case .failed(let error) = model.updateState {
-                    Text(error).font(.system(size: 11)).foregroundStyle(Brand.bad)
+                default:
+                    VStack(alignment: .leading, spacing: 10) {
+                        PrimaryAction(title: model.updateState == .checking ? "Checking…" : "Check for updates",
+                                      symbol: "arrow.triangle.2.circlepath", accent: Brand.amber) {
+                            model.checkForUpdates()
+                        }
+                        .disabled(model.updateState == .checking)
+                        if !model.updateNotes.isEmpty {
+                            HStack {
+                                Spacer()
+                                Button { model.showReleaseNotes = true } label: {
+                                    Label("What's new", systemImage: "doc.text")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .buttonStyle(.bordered).tint(Brand.amber).pointingCursor()
+                            }
+                        }
+                    }
                 }
             }
             GlassCard {
