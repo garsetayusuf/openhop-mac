@@ -191,7 +191,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "OpenHop"
         add("Open \(displayName)", #selector(openFromMenu), true)
         guard setupDone else { return }
-        add("Check for Updates…", #selector(checkUpdates), true)
+        switch model.updateState {
+        case .available: add("Download Update", #selector(downloadUpdate), true)
+        case .downloading: add("Cancel Download", #selector(cancelUpdate), true)
+        case .ready: add("Install & Restart", #selector(installUpdate), true)
+        default: add("Check for Updates…", #selector(checkUpdates), true)
+        }
         menu.addItem(NSMenuItem.separator())
         add(model.liveWarpConnected() || model.liveJobRunning("keeper") ? "Disconnect" : "Connect", #selector(toggleConnection), true)
         add("Rotate IP", #selector(rotateIP), setupDone && model.operationState == .running && !model.isBusy)
@@ -288,10 +293,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             guard let created = window else { return }
             w = created
         }
+        // Join the current Space only long enough to summon the window there.
+        let previousBehavior = w.collectionBehavior
+        w.collectionBehavior.insert(.canJoinAllSpaces)
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         w.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak w] in
+            w?.collectionBehavior = previousBehavior
+        }
     }
 
     @objc private func hideFromCmdQ() {
@@ -357,6 +368,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
         NSApp.terminate(nil)
     }
     @objc private func checkUpdates() { model.checkForUpdates() }
+    @objc private func downloadUpdate() { model.downloadUpdate() }
+    @objc private func cancelUpdate() { model.cancelUpdate() }
+    @objc private func installUpdate() { model.installUpdate() }
     @objc private func restartAfterUpdate() {
         explicitQuit = true
         NSApp.terminate(nil)
@@ -536,6 +550,7 @@ private struct PrimaryAction: View {
     let title: String
     let symbol: String
     var accent: Color = Brand.surface
+    var maxWidth: CGFloat? = nil
     let action: () -> Void
     var body: some View {
         Button(action: action) {
@@ -544,6 +559,7 @@ private struct PrimaryAction: View {
         }
         .buttonStyle(AccentButtonStyle(accent: accent))
         .pointingCursor()
+        .frame(maxWidth: maxWidth ?? .infinity, minHeight: 40)
     }
 }
 
@@ -1095,8 +1111,9 @@ private struct DiagnosticsPanel: View {
                 }
                 HStack(spacing: 10) {
                     PrimaryAction(title: model.doctorRunning ? "Running Doctor…" : "Run Doctor",
-                                  symbol: "stethoscope", accent: Brand.amber) { model.doctor() }
-                    PrimaryAction(title: "Fix", symbol: "wrench.and.screwdriver", accent: Brand.green) { model.repair() }
+                                  symbol: "stethoscope", accent: Brand.amber, maxWidth: 300) { model.doctor() }
+                    PrimaryAction(title: "Fix", symbol: "wrench.and.screwdriver", accent: Brand.green,
+                                  maxWidth: 280) { model.repair() }
                 }
                 .disabled(model.isBusy)
             }
@@ -1289,7 +1306,8 @@ private struct UsagePanel: View {
                 SectionTitle(text: "Auto-rotate watch")
                 Text("The guard watches OpenCode's log. On a free-limit message it gets a new IP, clears the limit banner and sends “continue” — about 10 seconds, chats and history untouched.")
                     .font(.system(size: 12)).foregroundStyle(Brand.text)
-                PrimaryAction(title: "Refresh counts", symbol: "arrow.triangle.2.circlepath", accent: Brand.amber) {
+                PrimaryAction(title: "Refresh counts", symbol: "arrow.triangle.2.circlepath", accent: Brand.amber,
+                              maxWidth: 300) {
                     model.loadUsage()
                 }
             }
@@ -1516,7 +1534,7 @@ private struct SettingsPanel: View {
                             .stroke(Color.white.opacity(0.07), lineWidth: 1))
                         HStack(spacing: 10) {
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
-                                          accent: Brand.green) { model.downloadUpdate() }
+                                          accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
                             if !model.updateNotes.isEmpty {
                                 Button { model.showReleaseNotes = true } label: {
                                     Label("What's new", systemImage: "doc.text")
@@ -1545,7 +1563,7 @@ private struct SettingsPanel: View {
                 case .ready:
                     HStack(spacing: 10) {
                         PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
-                                      accent: Brand.amber) { model.installUpdate() }
+                                      accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
@@ -1553,7 +1571,7 @@ private struct SettingsPanel: View {
                 default:
                     VStack(alignment: .leading, spacing: 10) {
                         PrimaryAction(title: model.updateState == .checking ? "Checking…" : "Check for updates",
-                                      symbol: "arrow.triangle.2.circlepath", accent: Brand.amber) {
+                                      symbol: "arrow.triangle.2.circlepath", accent: Brand.amber, maxWidth: 300) {
                             model.checkForUpdates()
                         }
                         .disabled(model.updateState == .checking)
@@ -1578,7 +1596,8 @@ private struct SettingsPanel: View {
                     Text("Notifications are off. Enable them in System Settings → Notifications → OpenHop.")
                         .font(.system(size: 11)).foregroundStyle(Brand.warn)
                 }
-                PrimaryAction(title: "Send test notification", symbol: "bell.badge", accent: Brand.amber) {
+                PrimaryAction(title: "Send test notification", symbol: "bell.badge", accent: Brand.amber,
+                              maxWidth: 300) {
                     model.sendTestNotification()
                 }
             }
