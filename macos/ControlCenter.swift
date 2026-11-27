@@ -1562,11 +1562,15 @@ private struct SettingsPanel: View {
                 case .ready:
                     HStack {
                         Spacer()
-                        PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
+                        if model.updateInstalling { ProgressView().controlSize(.small) }
+                        PrimaryAction(title: model.updateInstalling ? "Installing…" : "Install & Restart",
+                                      symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
+                            .disabled(model.updateInstalling)
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
+                            .disabled(model.updateInstalling)
                     }
                 default:
                     HStack {

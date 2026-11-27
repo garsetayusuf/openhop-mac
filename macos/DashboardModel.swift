@@ -615,6 +615,7 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
 
     var updater = UpdateManager()
     @Published var updateState: UpdateState = .idle
+    @Published var updateInstalling = false
     @Published var updateMessage = ""
     @Published var updateProgress: Double = 0
     @Published var updateBadge = false
@@ -709,7 +710,10 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     func downloadUpdate() { updater.download() }
     func cancelUpdate() { updater.cancel() }
     func installUpdate() {
+        guard !updateInstalling else { return }
+        updateInstalling = true
         updater.install { [weak self] ok, message in
+            self?.updateInstalling = false
             self?.updateMessage = message
             if ok {
                 NotificationCenter.default.post(name: .openhopUpdateRestart, object: nil)
