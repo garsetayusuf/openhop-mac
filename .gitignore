@@ -28,6 +28,7 @@ logs/
 .mypy_cache/
 
 # Local AI-assistant config/skill copies (not project source)
+.github/prompts/
 .agents/
 .augment/
 .claude/
