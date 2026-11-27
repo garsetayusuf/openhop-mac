@@ -620,12 +620,10 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     @Published var updateBadge = false
     @Published var updateNotes = ""
     @Published var showReleaseNotes = false
-    @Published var updateToast = ""
 
     private var updateCheckGeneration = 0
     private var checkAwaitingResult = false
     private var updateCheckStarted = Date()
-    private var updateToastClear: DispatchWorkItem?
 
     private func bindUpdater(_ u: UpdateManager, generation: Int) {
         u.onState = { [weak self, weak u] state, message, progress in
@@ -643,7 +641,7 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         let generation = updateCheckGeneration
         checkAwaitingResult = true
         updateCheckStarted = Date()
-        showUpdateToast("Checking for updates…", autoClear: false)
+        announce("Checking for updates", "Looking for the latest release.", .info)
         let u = UpdateManager()
         bindUpdater(u, generation: generation)
         updater = u
@@ -663,11 +661,16 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         if isCheckResult {
             // Hold the "Checking" toast long enough to be seen, even on a fast response.
             let wait = max(0, 0.65 - Date().timeIntervalSince(updateCheckStarted))
-            let outcome = updateOutcomeText(state, message)
             DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
                 guard let self, self.updateCheckGeneration == generation else { return }
                 self.commitUpdateState(state, message, progress, notes: notes)
-                self.showUpdateToast(outcome)
+                let detail = self.updateOutcomeText(state, message)
+                switch state {
+                case .upToDate: self.announce("Up to date", detail, .success)
+                case .available: self.announce("Update available", detail, .success)
+                case .failed: self.announce("Update check failed", detail, .error)
+                default: break
+                }
             }
         } else {
             commitUpdateState(state, message, progress, notes: notes)
@@ -701,23 +704,6 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         case .failed(let error): return message.isEmpty ? (error.isEmpty ? "Update check failed." : error) : message
         default: return message
         }
-    }
-
-    private func showUpdateToast(_ text: String, autoClear: Bool = true) {
-        updateToastClear?.cancel()
-        updateToast = text
-        guard autoClear else { return }
-        let work = DispatchWorkItem { [weak self] in
-            guard self?.updateToast == text else { return }
-            self?.updateToast = ""
-        }
-        updateToastClear = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
-    }
-
-    func clearUpdateToast() {
-        updateToastClear?.cancel()
-        updateToast = ""
     }
 
     func downloadUpdate() { updater.download() }
