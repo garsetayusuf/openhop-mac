@@ -585,6 +585,50 @@ private struct StatBox: View {
     }
 }
 
+// MARK: - Loading placeholders
+
+private struct SkeletonBar: View {
+    let width: CGFloat
+    var height: CGFloat = 12
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Brand.surface)
+                .frame(width: width, height: height)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Brand.muted.opacity(0.26))
+                        .frame(width: width, height: height)
+                        .opacity(opacity(at: timeline.date))
+                )
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func opacity(at date: Date) -> Double {
+        guard !reduceMotion else { return 0.4 }
+        return 0.45 + 0.35 * sin(date.timeIntervalSinceReferenceDate * 6)
+    }
+}
+
+private struct SkeletonCheckRow: View {
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            SkeletonBar(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 6) {
+                SkeletonBar(width: 130, height: 12)
+                SkeletonBar(width: 190, height: 10)
+            }
+            Spacer(minLength: 0)
+            SkeletonBar(width: 56, height: 22)
+        }
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Hairline() }
+    }
+}
+
 private struct StatusChip: View {
     let text: String
     let color: Color
@@ -1096,25 +1140,21 @@ private struct DiagnosticsPanel: View {
             GlassCard {
                 HStack(spacing: 10) {
                     SectionTitle(text: "System checks")
-                    if model.doctorRunning {
-                        HStack(spacing: 6) {
-                            ProgressView().controlSize(.small)
-                            Text("CHECKING…")
-                                .font(.system(size: 9, weight: .bold))
-                                .kerning(0.8)
-                                .foregroundStyle(Brand.amber)
-                        }
-                    }
                     Spacer()
                 }
                 VStack(spacing: 0) {
-                    ForEach(model.healthChecks) { check in
-                        CheckRow(check: check)
+                    if model.doctorRunning {
+                        ForEach(model.healthChecks) { _ in SkeletonCheckRow() }
+                    } else {
+                        ForEach(model.healthChecks) { check in
+                            CheckRow(check: check)
+                        }
                     }
                 }
                 HStack(spacing: 10) {
-                    PrimaryAction(title: model.doctorRunning ? "Running Doctor…" : "Run Doctor",
-                                  symbol: "stethoscope", accent: Brand.amber, maxWidth: 300) { model.doctor() }
+                    Spacer(minLength: 0)
+                    PrimaryAction(title: "Run Doctor", symbol: "stethoscope", accent: Brand.amber,
+                                  maxWidth: 300) { model.doctor() }
                     PrimaryAction(title: "Fix", symbol: "wrench.and.screwdriver", accent: Brand.green,
                                   maxWidth: 280) { model.repair() }
                 }
@@ -1264,7 +1304,11 @@ private struct UsagePanel: View {
     private func tile(_ title: String, _ value: String, _ note: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title.uppercased()).font(.system(size: 9, weight: .bold)).kerning(0.8).foregroundStyle(Brand.muted)
-            Text(value).font(.system(size: 22, weight: .bold)).foregroundStyle(Brand.text)
+            if model.usageLoading {
+                SkeletonBar(width: 88, height: 22)
+            } else {
+                Text(value).font(.system(size: 22, weight: .bold)).foregroundStyle(Brand.text)
+            }
             Text(note).font(.system(size: 10)).foregroundStyle(Brand.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1309,9 +1353,13 @@ private struct UsagePanel: View {
                 SectionTitle(text: "Auto-rotate watch")
                 Text("The guard watches OpenCode's log. On a free-limit message it gets a new IP, clears the limit banner and sends “continue” — about 10 seconds, chats and history untouched.")
                     .font(.system(size: 12)).foregroundStyle(Brand.text)
-                PrimaryAction(title: "Refresh counts", symbol: "arrow.triangle.2.circlepath", accent: Brand.amber,
-                              maxWidth: 300) {
-                    model.loadUsage()
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    PrimaryAction(title: "Refresh counts", symbol: "arrow.triangle.2.circlepath", accent: Brand.amber,
+                                  maxWidth: 300) {
+                        model.loadUsage()
+                    }
+                    .disabled(model.isBusy)
                 }
             }
         }
@@ -1543,9 +1591,9 @@ private struct SettingsPanel: View {
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .stroke(Color.white.opacity(0.07), lineWidth: 1))
                         HStack {
+                            Spacer(minLength: 0)
                             PrimaryAction(title: "Update to \(v)", symbol: "arrow.down.circle",
                                           accent: Brand.green, maxWidth: 300) { model.downloadUpdate() }
-                            Spacer(minLength: 0)
                         }
                     }
                 case .downloading:
@@ -1561,12 +1609,10 @@ private struct SettingsPanel: View {
                     }
                 case .ready:
                     HStack {
-                        if model.updateInstalling { ProgressView().controlSize(.small) }
-                        PrimaryAction(title: model.updateInstalling ? "Installing…" : "Install & Restart",
-                                      symbol: "arrow.triangle.2.circlepath",
+                        Spacer(minLength: 0)
+                        PrimaryAction(title: "Install & Restart", symbol: "arrow.triangle.2.circlepath",
                                       accent: Brand.amber, maxWidth: 300) { model.installUpdate() }
                             .disabled(model.updateInstalling)
-                        Spacer(minLength: 0)
                         Button("Cancel") { model.cancelUpdate() }
                             .buttonStyle(OutlineButtonStyle(accent: Brand.muted))
                             .pointingCursor()
@@ -1574,11 +1620,11 @@ private struct SettingsPanel: View {
                     }
                 default:
                     HStack {
+                        Spacer(minLength: 0)
                         PrimaryAction(title: "Check for updates",
                                       symbol: "arrow.triangle.2.circlepath", accent: Brand.amber, maxWidth: 300) {
                             model.checkForUpdates()
                         }
-                        Spacer(minLength: 0)
                     }
                 }
             }
@@ -1590,9 +1636,12 @@ private struct SettingsPanel: View {
                     Text("Notifications are off. Enable them in System Settings → Notifications → OpenHop.")
                         .font(.system(size: 11)).foregroundStyle(Brand.warn)
                 }
-                PrimaryAction(title: "Send test notification", symbol: "bell.badge", accent: Brand.amber,
-                              maxWidth: 300) {
-                    model.sendTestNotification()
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    PrimaryAction(title: "Send test notification", symbol: "bell.badge", accent: Brand.amber,
+                                  maxWidth: 300) {
+                        model.sendTestNotification()
+                    }
                 }
             }
         }

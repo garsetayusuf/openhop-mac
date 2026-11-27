@@ -81,6 +81,7 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     @Published var toast: AppToast?
     @Published var notificationStatus = "not requested"
     @Published var doctorRunning = false
+    @Published var usageLoading = false
     @Published var auxiliaryBusy = false
     @Published var keepInBackground: Bool = UserDefaults.standard.object(forKey: "openhop.keepInBackground") as? Bool ?? true
 
@@ -127,7 +128,8 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     }
 
     var isBusy: Bool {
-        operationState == .starting || operationState == .stopping || operationState == .switching || auxiliaryBusy
+        operationState == .starting || operationState == .stopping || operationState == .switching ||
+        auxiliaryBusy || updateInstalling || usageLoading
     }
 
     lazy var coordinator: LifecycleCoordinator = {
@@ -332,22 +334,29 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
 
     func doctor() {
         guard !isBusy else { return }
+        let started = Date()
         auxiliaryBusy = true
         doctorRunning = true
+        progressMessage = "Running health checks…"
         announce("Running health checks", "Checking services, tunnel and IP.", .info)
         emit(title: "Health check started", detail: "Checking services, tunnel and IP.", symbol: "stethoscope", tone: .info)
-        runAsync(doctorPath) { r in
-            self.auxiliaryBusy = false
-            self.doctorRunning = false
-            self.applyDoctor(r.output)
-            self.refreshStates()
-            let ok = r.ok
-            let passed = self.healthChecks.filter { $0.ok }.count
-            let detail = ok ? "\(passed) of \(self.healthChecks.count) checks passed."
-                            : "Health checks could not complete."
-            self.announce(ok ? "Health check complete" : "Health check failed", detail, ok ? .success : .error)
-            self.emit(title: ok ? "Health check completed" : "Health check failed", detail: detail,
-                      symbol: ok ? "checkmark.circle.fill" : "xmark.circle.fill", tone: ok ? .success : .error)
+        runAsync(doctorPath) { [weak self] r in
+            guard let self else { return }
+            // Hold the placeholders long enough to be seen, even on an instant check.
+            let wait = max(0, 0.4 - Date().timeIntervalSince(started))
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                self.auxiliaryBusy = false
+                self.doctorRunning = false
+                self.applyDoctor(r.output)
+                self.refreshStates()
+                let ok = r.ok
+                let passed = self.healthChecks.filter { $0.ok }.count
+                let detail = ok ? "\(passed) of \(self.healthChecks.count) checks passed."
+                                : "Health checks could not complete."
+                self.announce(ok ? "Health check complete" : "Health check failed", detail, ok ? .success : .error)
+                self.emit(title: ok ? "Health check completed" : "Health check failed", detail: detail,
+                          symbol: ok ? "checkmark.circle.fill" : "xmark.circle.fill", tone: ok ? .success : .error)
+            }
         }
     }
 
@@ -712,8 +721,10 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     func installUpdate() {
         guard !updateInstalling else { return }
         updateInstalling = true
+        progressMessage = "Installing update…"
         updater.install { [weak self] ok, message in
             self?.updateInstalling = false
+            self?.progressMessage = "Ready"
             self?.updateMessage = message
             if ok {
                 NotificationCenter.default.post(name: .openhopUpdateRestart, object: nil)
@@ -850,13 +861,22 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
     @Published var usageText = "No rotations recorded yet"
 
     func loadUsage() {
+        guard !usageLoading else { return }
+        let started = Date()
+        usageLoading = true
+        progressMessage = "Refreshing usage…"
         let script = (base as NSString).appendingPathComponent("scripts/usage-macos.sh")
-        runAsync(script, args: [], timeout: 25) { r in
-            guard r.ok, let data = r.output.data(using: .utf8),
-                  let stats = try? JSONDecoder().decode(UsageStats.self, from: data) else { return }
-            DispatchQueue.main.async {
-                self.usage = stats
-                self.usageText = "\(stats.rotationsToday) rotations today · \(stats.rotationsAll) all time · \(stats.usedUp) used-up addresses"
+        runAsync(script, args: [], timeout: 25) { [weak self] r in
+            guard let self else { return }
+            // Keep placeholders up briefly so a fast refresh never flashes stale zeros.
+            let wait = max(0, 0.4 - Date().timeIntervalSince(started))
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) {
+                if r.ok, let data = r.output.data(using: .utf8),
+                   let stats = try? JSONDecoder().decode(UsageStats.self, from: data) {
+                    self.usage = stats
+                    self.usageText = "\(stats.rotationsToday) rotations today · \(stats.rotationsAll) all time · \(stats.usedUp) used-up addresses"
+                }
+                self.usageLoading = false
             }
         }
     }
