@@ -33,14 +33,27 @@ final class UpdateManager {
     private var dataTask: URLSessionDataTask?
     private var downloadTask: URLSessionDownloadTask?
     private var downloadGeneration = 0
+    private var progressTimer: Timer?
+
+    private func stopProgressTimer() {
+        progressTimer?.invalidate()
+        progressTimer = nil
+    }
     private(set) var latestVersion: String?
     private(set) var dmgURL: URL?
     private(set) var manifestURL: URL?
     private(set) var notes = ""
+    private static let isTestBuild = Bundle.main.bundleIdentifier?.hasSuffix(".test") == true
     private var dmgPath: String {
-        let dir = NSHomeDirectory() + "/Library/Caches/openhop/updates"
+        let dir = NSHomeDirectory() + (Self.isTestBuild
+            ? "/Library/Caches/openhop-test/updates" : "/Library/Caches/openhop/updates")
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir + "/OpenHop.dmg"
+    }
+    private var installTarget: String {
+        Self.isTestBuild
+            ? NSHomeDirectory() + "/Library/Application Support/openhop-test/OpenHop.app"
+            : "/Applications/OpenHop.app"
     }
     private var manifestPath: String { dmgPath + ".sha256" }
 
@@ -103,6 +116,7 @@ final class UpdateManager {
         emit(.downloading, "Downloading update…", 0)
         downloadTask = URLSession.shared.downloadTask(with: url) { [weak self] temp, _, error in
             guard let self else { return }
+            self.stopProgressTimer()
             if let cancelled = error as? URLError, cancelled.code == .cancelled {
                 DispatchQueue.main.async { self.downloadTask = nil }
                 return
@@ -128,6 +142,14 @@ final class UpdateManager {
             }.resume()
         }
         downloadTask?.resume()
+        DispatchQueue.main.async {
+            self.progressTimer?.invalidate()
+            self.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+                guard let self, let task = self.downloadTask else { return }
+                let fraction = min(0.99, max(0, task.progress.fractionCompleted))
+                self.emit(.downloading, "Downloading update… \(Int(fraction * 100))%", fraction)
+            }
+        }
     }
 
     private func verifyAndFinish(temp: URL, manifestData: Data, generation: Int) {
@@ -261,7 +283,7 @@ final class UpdateManager {
                 DispatchQueue.main.async { completion(false, "Could not stage the update (exit \(copy.0)).") }
                 return
             }
-            let target = "/Applications/OpenHop.app"
+            let target = self.installTarget
             let backup = stage + "/OpenHop-old.app"
             let moveOld = run("/bin/mv", [target, backup])
             let install = run("/bin/mv", [staged, target])

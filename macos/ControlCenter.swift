@@ -188,7 +188,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             i.isEnabled = enabled
             menu.addItem(i)
         }
-        add("Open OpenHop", #selector(openFromMenu), true)
+        let displayName = Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "OpenHop"
+        add("Open \(displayName)", #selector(openFromMenu), true)
         guard setupDone else { return }
         add("Check for Updates…", #selector(checkUpdates), true)
         menu.addItem(NSMenuItem.separator())
@@ -288,9 +289,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             w = created
         }
         NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
         w.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func hideFromCmdQ() {
@@ -1527,6 +1528,11 @@ private struct SettingsPanel: View {
                     }
                 case .downloading:
                     VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("Downloading \(Int(model.updateProgress * 100))%")
+                                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Brand.amber)
+                            Spacer(minLength: 0)
+                        }
                         ProgressView(value: model.updateProgress)
                             .progressViewStyle(.linear).tint(Brand.amber).frame(height: 6)
                         HStack {
