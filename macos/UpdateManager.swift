@@ -137,6 +137,7 @@ final class UpdateManager {
         let script = FileManager.default.fileExists(atPath: installedScript)
             ? installedScript
             : Bundle.main.resourceURL?.appendingPathComponent("payload/src/verify_update.py").path
+        let expected = (latestVersion ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
         let manifest = manifestPath
         let dmg = dmgPath
         DispatchQueue.global(qos: .userInitiated).async {
@@ -163,7 +164,7 @@ final class UpdateManager {
             }
             let p = Process()
             p.executableURL = URL(fileURLWithPath: py)
-            p.arguments = [script, temp.path, manifest, Self.publicKeyBase64, self.latestVersion ?? ""]
+            p.arguments = [script, temp.path, manifest, Self.publicKeyBase64, expected]
             let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
             do { try p.run() } catch {
                 try? FileManager.default.removeItem(at: temp)
