@@ -1,9 +1,8 @@
 name: release
 
-# Temporarily disabled: UI issues are being fixed. Re-enable by restoring the
-# push trigger below when the user confirms the app is ready to publish again.
 on:
-  workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
