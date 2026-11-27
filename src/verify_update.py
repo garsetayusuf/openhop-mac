@@ -9,13 +9,16 @@ from pathlib import Path
 from ed25519_verify import verify
 
 
-def main(dmg: str, manifest_path: str, pubkey_b64: str) -> int:
+def main(dmg: str, manifest_path: str, pubkey_b64: str, expected_version: str | None = None) -> int:
     values: dict[str, str] = {}
     for line in Path(manifest_path).read_text(encoding="utf-8").splitlines():
         if "=" in line:
             key, value = line.split("=", 1)
             values[key.strip()] = value.strip()
     version = values.get("version", "")
+    if expected_version is not None and version != expected_version:
+        print("FAIL: version mismatch")
+        return 1
     expected = values.get("sha256", "").lower()
     signature_text = values.get("signature", "")
     if not version or len(expected) != 64 or not signature_text:
@@ -40,7 +43,8 @@ def main(dmg: str, manifest_path: str, pubkey_b64: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("FAIL: usage: verify_update.py DMG MANIFEST PUBKEY_B64")
+    if len(sys.argv) not in (4, 5):
+        print("FAIL: usage: verify_update.py DMG MANIFEST PUBKEY_B64 [EXPECTED_VERSION]")
         raise SystemExit(1)
-    raise SystemExit(main(sys.argv[1], sys.argv[2], sys.argv[3]))
+    expected_version = sys.argv[4] if len(sys.argv) == 5 else None
+    raise SystemExit(main(sys.argv[1], sys.argv[2], sys.argv[3], expected_version))

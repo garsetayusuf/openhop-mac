@@ -133,13 +133,23 @@ final class UpdateManager {
     private func verifyAndFinish(temp: URL, manifestData: Data, generation: Int) {
         let home = NSHomeDirectory()
         let py = home + "/Library/Application Support/openhop/venv/bin/python"
-        let src = home + "/Library/Application Support/openhop/src"
-        let script = src + "/verify_update.py"
+        let installedScript = home + "/Library/Application Support/openhop/src/verify_update.py"
+        let script = FileManager.default.fileExists(atPath: installedScript)
+            ? installedScript
+            : Bundle.main.resourceURL?.appendingPathComponent("payload/src/verify_update.py").path
         let manifest = manifestPath
         let dmg = dmgPath
         DispatchQueue.global(qos: .userInitiated).async {
             guard self.downloadGeneration == generation else {
                 try? FileManager.default.removeItem(at: temp)
+                return
+            }
+            guard let script else {
+                try? FileManager.default.removeItem(at: temp)
+                try? FileManager.default.removeItem(atPath: manifest)
+                guard self.downloadGeneration == generation else { return }
+                DispatchQueue.main.async { self.downloadTask = nil }
+                self.emit(.failed("Update verifier is missing — reinstall OpenHop."), "", 0)
                 return
             }
             do {
@@ -153,7 +163,7 @@ final class UpdateManager {
             }
             let p = Process()
             p.executableURL = URL(fileURLWithPath: py)
-            p.arguments = [script, temp.path, manifest, Self.publicKeyBase64]
+            p.arguments = [script, temp.path, manifest, Self.publicKeyBase64, self.latestVersion ?? ""]
             let pipe = Pipe(); p.standardOutput = pipe; p.standardError = pipe
             do { try p.run() } catch {
                 try? FileManager.default.removeItem(at: temp)
