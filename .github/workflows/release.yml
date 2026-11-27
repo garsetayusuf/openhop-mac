@@ -1,0 +1,87 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - name: Check out source (full history for tags)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Set up virtualenv and install dependencies
+        run: |
+          VENV="$HOME/Library/Application Support/openhop/venv"
+          python -m venv "$VENV"
+          "$VENV/bin/python" -m pip install --upgrade pip
+          "$VENV/bin/python" -m pip install -r requirements-macos.txt
+
+      - name: Install signing key
+        env:
+          SIGNING_KEY_B64: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          umask 077
+          SIGN_DIR="$HOME/Library/Application Support/openhop/signing"
+          mkdir -p "$SIGN_DIR"
+          printf '%s' "$SIGNING_KEY_B64" | base64 -D > "$SIGN_DIR/private.pem"
+          chmod 600 "$SIGN_DIR/private.pem"
+
+      - name: Bump version
+        run: |
+          LAST=$(git tag --list 'v[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$LAST" ]; then
+            BASE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" macos/Info.plist)
+          else
+            BASE="${LAST#v}"
+          fi
+          IFS=. read -r MAJOR MINOR PATCH _ <<< "$BASE"
+          VER="$MAJOR.$MINOR.$((10#$PATCH + 1))"
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VER" macos/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(echo "$VER" | tr -d '.')" macos/Info.plist
+
+      - name: Build DMG
+        run: bash build-dmg.sh
+
+      - name: Sign and write manifest
+        run: |
+          SHA=$(shasum -a 256 dist/OpenHop.dmg | awk '{print $1}')
+          MSG="OpenHop|$VER|$SHA"
+          node -e 'const c=require("crypto"),fs=require("fs");const m=Buffer.from(process.argv[2]);fs.writeFileSync(process.argv[3],c.sign(null,m,fs.readFileSync(process.argv[1])));' "$HOME/Library/Application Support/openhop/signing/private.pem" "$MSG" "$RUNNER_TEMP/sig.bin"
+          SIG=$(base64 -i "$RUNNER_TEMP/sig.bin" | tr -d '\n')
+          printf 'version=%s\nsha256=%s\nsignature=%s\n' "$VER" "$SHA" "$SIG" > dist/OpenHop.dmg.sha256
+
+      - name: Commit, tag and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add macos/Info.plist
+          git commit -m "Release v$VER [skip ci]"
+          git tag "v$VER"
+          git push && git push --tags
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v$VER" dist/OpenHop.dmg dist/OpenHop.dmg.sha256 --verify-tag --title "v$VER" --notes "OpenHop for macOS v$VER"
+
+      - name: Wipe signing key
+        if: always()
+        run: rm -f "$HOME/Library/Application Support/openhop/signing/private.pem"
