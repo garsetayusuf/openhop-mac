@@ -123,6 +123,7 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
         super.init()
         healthChecks = parseDoctor("")
         events = loadEvents()
+        bindUpdater(updater, generation: 0)
     }
 
     var isBusy: Bool {
@@ -612,44 +613,113 @@ final class DashboardModel: NSObject, ObservableObject, UNUserNotificationCenter
 
     // MARK: - Updates
 
-    lazy var updater: UpdateManager = {
-        let u = UpdateManager()
-        u.onState = { [weak self, weak u] state, message, progress in
-            let notes = u?.notes ?? ""
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.updateNotes = notes
-                let wasAvailable: Bool
-                if case .available = self.updateState { wasAvailable = true } else { wasAvailable = false }
-                self.updateState = state
-                self.updateMessage = message
-                self.updateProgress = progress
-                switch state {
-                case .available(let v):
-                    self.updateBadge = true
-                    if !wasAvailable {
-                        self.notifyUpdate(title: "OpenHop update available", body: "Version \(v) is ready. Open Settings → About to update.")
-                    }
-                case .upToDate:
-                    self.updateBadge = false
-                default:
-                    break
-                }
-            }
-        }
-        return u
-    }()
+    var updater = UpdateManager()
     @Published var updateState: UpdateState = .idle
     @Published var updateMessage = ""
     @Published var updateProgress: Double = 0
     @Published var updateBadge = false
     @Published var updateNotes = ""
     @Published var showReleaseNotes = false
+    @Published var updateToast = ""
 
+    private var updateCheckGeneration = 0
+    private var checkAwaitingResult = false
+    private var updateCheckStarted = Date()
+    private var updateToastClear: DispatchWorkItem?
+
+    private func bindUpdater(_ u: UpdateManager, generation: Int) {
+        u.onState = { [weak self, weak u] state, message, progress in
+            let notes = u?.notes ?? ""
+            DispatchQueue.main.async {
+                self?.applyUpdateState(state, message, progress, notes: notes, generation: generation)
+            }
+        }
+    }
+
+    /// Each click gets a fresh updater so an in-flight request cannot swallow the new check.
     func checkForUpdates() {
         guard updateState != .ready, updateState != .downloading else { return }
-        updater.check()
+        updateCheckGeneration += 1
+        let generation = updateCheckGeneration
+        checkAwaitingResult = true
+        updateCheckStarted = Date()
+        showUpdateToast("Checking for updates…", autoClear: false)
+        let u = UpdateManager()
+        bindUpdater(u, generation: generation)
+        updater = u
+        u.check()
     }
+
+    private func applyUpdateState(_ state: UpdateState, _ message: String, _ progress: Double,
+                                  notes: String, generation: Int) {
+        guard generation == updateCheckGeneration else { return }
+        var isCheckResult = false
+        switch state {
+        case .upToDate, .available, .failed:
+            isCheckResult = checkAwaitingResult
+            checkAwaitingResult = false
+        default: break
+        }
+        if isCheckResult {
+            // Hold the "Checking" toast long enough to be seen, even on a fast response.
+            let wait = max(0, 0.65 - Date().timeIntervalSince(updateCheckStarted))
+            let outcome = updateOutcomeText(state, message)
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+                guard let self, self.updateCheckGeneration == generation else { return }
+                self.commitUpdateState(state, message, progress, notes: notes)
+                self.showUpdateToast(outcome)
+            }
+        } else {
+            commitUpdateState(state, message, progress, notes: notes)
+        }
+    }
+
+    private func commitUpdateState(_ state: UpdateState, _ message: String, _ progress: Double, notes: String) {
+        updateNotes = notes
+        let wasAvailable: Bool
+        if case .available = self.updateState { wasAvailable = true } else { wasAvailable = false }
+        updateState = state
+        updateMessage = message
+        updateProgress = progress
+        switch state {
+        case .available(let v):
+            updateBadge = true
+            if !wasAvailable {
+                notifyUpdate(title: "OpenHop update available", body: "Version \(v) is ready. Open Settings → About to update.")
+            }
+        case .upToDate:
+            updateBadge = false
+        default:
+            break
+        }
+    }
+
+    private func updateOutcomeText(_ state: UpdateState, _ message: String) -> String {
+        switch state {
+        case .upToDate: return message.isEmpty ? "You are up to date." : message
+        case .available: return message.isEmpty ? "An update is available." : message
+        case .failed(let error): return message.isEmpty ? (error.isEmpty ? "Update check failed." : error) : message
+        default: return message
+        }
+    }
+
+    private func showUpdateToast(_ text: String, autoClear: Bool = true) {
+        updateToastClear?.cancel()
+        updateToast = text
+        guard autoClear else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard self?.updateToast == text else { return }
+            self?.updateToast = ""
+        }
+        updateToastClear = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    func clearUpdateToast() {
+        updateToastClear?.cancel()
+        updateToast = ""
+    }
+
     func downloadUpdate() { updater.download() }
     func cancelUpdate() { updater.cancel() }
     func installUpdate() {

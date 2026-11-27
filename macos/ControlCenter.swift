@@ -728,6 +728,10 @@ private struct MainPane: View {
         VStack(spacing: 0) {
             Toolbar(section: current)
             Hairline()
+            if !model.updateToast.isEmpty {
+                UpdateToastBanner(text: model.updateToast)
+                    .padding(.horizontal, 28).padding(.top, 12)
+            }
             GeometryReader { geo in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
@@ -1567,11 +1571,10 @@ private struct SettingsPanel: View {
                     }
                 default:
                     VStack(alignment: .leading, spacing: 10) {
-                        PrimaryAction(title: model.updateState == .checking ? "Checking…" : "Check for updates",
+                        PrimaryAction(title: "Check for updates",
                                       symbol: "arrow.triangle.2.circlepath", accent: Brand.amber, maxWidth: 300) {
                             model.checkForUpdates()
                         }
-                        .disabled(model.updateState == .checking)
                     }
                 }
             }
@@ -1631,6 +1634,38 @@ private struct ReleaseNotesView: View {
         .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
         .padding(20)
         .background(Brand.bg)
+    }
+}
+
+private struct UpdateToastBanner: View {
+    let text: String
+    @EnvironmentObject var model: DashboardModel
+
+    private var checking: Bool { text.hasPrefix("Checking") }
+
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: checking ? "arrow.triangle.2.circlepath" : "info.circle.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Brand.amber)
+            Text(text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Brand.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button { model.clearUpdateToast() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Brand.muted)
+            }
+            .buttonStyle(.plain)
+            .pointingCursor()
+        }
+        .padding(.horizontal, 13).padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(Brand.amber.opacity(0.24), lineWidth: 1))
+        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
     }
 }
 
